@@ -1,10 +1,19 @@
 import Link from "next/link";
-import { STATUS_BADGE } from "@/lib/constants";
+import { STATUS_BADGE, CURRENCY_SYMBOLS, type Currency } from "@/lib/constants";
+import { formatMoneyCompact } from "@/lib/money";
 
 export function StatusBadge({ status, label }: { status: string; label?: string }) {
   const cls = STATUS_BADGE[status] ?? "bg-gray-100 text-gray-700";
   return <span className={`badge ${cls}`}>{label ?? status.replace(/_/g, " ").toLowerCase()}</span>;
 }
+
+/** Render a minor-unit amount, or a muted dash when zero. */
+export function Money({ minor, currency }: { minor: number; currency: Currency }) {
+  if (!minor) return <span className="text-gray-300">—</span>;
+  return <span>{formatMoneyCompact(minor, currency)}</span>;
+}
+
+export { CURRENCY_SYMBOLS };
 
 export function PageHeader({
   title,

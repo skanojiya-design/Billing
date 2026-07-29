@@ -1,246 +1,204 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { addDays, subDays, subMonths, addMonths } from "date-fns";
 
 const prisma = new PrismaClient();
 
-const rupees = (r: number) => Math.round(r * 100); // to paise
+// minor-unit helpers
+const inr = (r: number) => Math.round(r * 100); // paise
+const usd = (d: number) => Math.round(d * 100); // cents
+const eur = (e: number) => Math.round(e * 100); // cents
+const d = (y: number, m: number, day: number) => new Date(y, m - 1, day);
 
 async function main() {
-  console.log("Seeding roqit Billing…");
+  console.log("Seeding roqit Billing (recurring-payment tracker)…");
 
   // Wipe (order matters due to FKs)
   await prisma.emailOutbox.deleteMany();
-  await prisma.payment.deleteMany();
-  await prisma.invoiceLineItem.deleteMany();
-  await prisma.invoice.deleteMany();
-  await prisma.transaction.deleteMany();
-  await prisma.subscription.deleteMany();
-  await prisma.plan.deleteMany();
-  await prisma.organization.deleteMany();
+  await prisma.document.deleteMany();
+  await prisma.paymentEntry.deleteMany();
+  await prisma.service.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.user.deleteMany();
 
-  // ---- Users -------------------------------------------------------------
+  // ---- Team members ------------------------------------------------------
   const pwd = await bcrypt.hash("password123", 10);
   const admin = await prisma.user.create({
     data: { email: "admin@roqit.com", name: "Admin", passwordHash: pwd, role: "ADMIN" },
   });
-  const approver = await prisma.user.create({
-    data: { email: "approver@roqit.com", name: "Priya (Finance)", passwordHash: pwd, role: "APPROVER" },
+  const editor = await prisma.user.create({
+    data: { email: "editor@roqit.com", name: "Prashanth (Finance)", passwordHash: pwd, role: "EDITOR" },
   });
   await prisma.user.create({
     data: { email: "viewer@roqit.com", name: "Viewer", passwordHash: pwd, role: "VIEWER" },
   });
 
-  // ---- Plans -------------------------------------------------------------
-  const starter = await prisma.plan.create({
-    data: { name: "Starter", description: "Up to 5 seats", amountPaise: rupees(4999), interval: "MONTHLY" },
-  });
-  const growth = await prisma.plan.create({
-    data: { name: "Growth", description: "Up to 25 seats", amountPaise: rupees(14999), interval: "MONTHLY" },
-  });
-  const enterprise = await prisma.plan.create({
-    data: { name: "Enterprise", description: "Unlimited seats + SLA", amountPaise: rupees(120000), interval: "YEARLY" },
-  });
-
-  // ---- Organizations -----------------------------------------------------
-  const acme = await prisma.organization.create({
-    data: {
-      name: "Acme Retail Pvt Ltd",
-      contactName: "Rahul Verma",
-      contactEmail: "rahul@acmeretail.example",
-      phone: "+91 98200 11111",
-      gstin: "27AABCA1234A1Z5",
-      billingAddress: "12 MG Road, Bengaluru 560001",
-      notes: "Long-time customer. Prefers quarterly invoicing.",
-    },
-  });
-  const nimbus = await prisma.organization.create({
-    data: {
-      name: "Nimbus Logistics",
-      contactName: "Sana Kapoor",
-      contactEmail: "sana@nimbus.example",
-      phone: "+91 99870 22222",
-      gstin: "29AACCN5678B1Z2",
-      billingAddress: "Plot 44, HITEC City, Hyderabad 500081",
-    },
-  });
-  const zenith = await prisma.organization.create({
-    data: {
-      name: "Zenith Media",
-      contactName: "Arjun Nair",
-      contactEmail: "arjun@zenithmedia.example",
-      phone: "+91 90040 33333",
-      billingAddress: "5th Floor, Lower Parel, Mumbai 400013",
-    },
-  });
-
-  // ---- Subscriptions -----------------------------------------------------
-  const acmeSub = await prisma.subscription.create({
-    data: {
-      organizationId: acme.id,
-      planId: growth.id,
-      amountPaise: growth.amountPaise,
-      interval: "MONTHLY",
-      startDate: subMonths(new Date(), 6),
-      nextBillingDate: addDays(new Date(), 3), // billing soon
-    },
-  });
-  await prisma.subscription.create({
-    data: {
-      organizationId: nimbus.id,
-      planId: starter.id,
-      amountPaise: starter.amountPaise,
-      interval: "MONTHLY",
-      startDate: subMonths(new Date(), 2),
-      nextBillingDate: subDays(new Date(), 1), // due now — billing run will raise a charge
-    },
-  });
-  await prisma.subscription.create({
-    data: {
-      organizationId: zenith.id,
-      planId: enterprise.id,
-      amountPaise: enterprise.amountPaise,
-      interval: "YEARLY",
-      startDate: subMonths(new Date(), 1),
-      nextBillingDate: addMonths(new Date(), 11),
-    },
-  });
-
-  // ---- Transactions in various states -----------------------------------
-  // 1) A paid subscription charge (last month) -> invoice -> payment
-  const t1 = await prisma.transaction.create({
-    data: {
-      organizationId: acme.id,
-      type: "SUBSCRIPTION",
-      description: "Growth — monthly subscription",
-      amountPaise: growth.amountPaise,
-      status: "PAID",
-      subscriptionId: acmeSub.id,
-      createdById: admin.id,
-      approvedById: approver.id,
-      approvedAt: subMonths(new Date(), 1),
-      paidAt: subDays(new Date(), 20),
-      dueDate: subDays(new Date(), 25),
-    },
-  });
-  const inv1 = await prisma.invoice.create({
-    data: {
-      number: `ROQ-${new Date().getFullYear()}-0001`,
-      organizationId: acme.id,
-      transactionId: t1.id,
-      status: "PAID",
-      issueDate: subMonths(new Date(), 1),
-      dueDate: subDays(new Date(), 25),
-      subtotalPaise: growth.amountPaise,
-      taxRatePct: 18,
-      taxPaise: Math.round(growth.amountPaise * 0.18),
-      totalPaise: growth.amountPaise + Math.round(growth.amountPaise * 0.18),
-      amountPaidPaise: growth.amountPaise + Math.round(growth.amountPaise * 0.18),
-      lineItems: {
-        create: [{ description: "Growth — monthly subscription", quantity: 1, unitAmountPaise: growth.amountPaise, amountPaise: growth.amountPaise }],
+  // ---- Recurring services (the vendors ROQIT pays) -----------------------
+  // amounts below are the "default" prefill used when generating a month.
+  const services = await Promise.all(
+    [
+      {
+        name: "Flespi", vendorType: "SUBSCRIPTION", billingFrequency: "MONTHLY",
+        currency: "USD", dueDayOfMonth: 16, vendorUrl: "https://flespi.com",
+        defaultInrPaise: inr(25702.8), defaultUsdCents: usd(269), defaultEurCents: eur(236),
+        notes: "IoT telemetry platform. Billed after invoice is generated.",
       },
-    },
-  });
-  await prisma.payment.create({
-    data: { invoiceId: inv1.id, amountPaise: inv1.totalPaise, method: "UPI", reference: "UPI-8842019", paidAt: subDays(new Date(), 20), recordedBy: admin.name },
-  });
-
-  // 2) An OVERDUE invoice (pay-as-you-go, past due date, unpaid)
-  const t2 = await prisma.transaction.create({
-    data: {
-      organizationId: nimbus.id,
-      type: "PAY_AS_YOU_GO",
-      description: "API overage — 1.2M extra calls",
-      amountPaise: rupees(23400),
-      status: "INVOICED",
-      createdById: admin.id,
-      approvedById: approver.id,
-      approvedAt: subDays(new Date(), 40),
-      dueDate: subDays(new Date(), 10),
-    },
-  });
-  await prisma.invoice.create({
-    data: {
-      number: `ROQ-${new Date().getFullYear()}-0002`,
-      organizationId: nimbus.id,
-      transactionId: t2.id,
-      status: "SENT", // alert engine will flip this to OVERDUE on first run
-      issueDate: subDays(new Date(), 40),
-      dueDate: subDays(new Date(), 10),
-      subtotalPaise: rupees(23400),
-      taxRatePct: 18,
-      taxPaise: Math.round(rupees(23400) * 0.18),
-      totalPaise: rupees(23400) + Math.round(rupees(23400) * 0.18),
-      lineItems: {
-        create: [{ description: "API overage — 1.2M extra calls", quantity: 1, unitAmountPaise: rupees(23400), amountPaise: rupees(23400) }],
+      {
+        name: "GitHub", vendorType: "SUBSCRIPTION", billingFrequency: "MONTHLY",
+        currency: "USD", dueDayOfMonth: 23, vendorUrl: "https://github.com",
+        defaultInrPaise: inr(2287.4), defaultUsdCents: usd(24), defaultEurCents: eur(21.12),
+        notes: "Team seats. Advance payment.",
       },
-    },
-  });
-
-  // 3) A DUE-SOON invoice (one-time, due in 3 days, unpaid)
-  const t3 = await prisma.transaction.create({
-    data: {
-      organizationId: zenith.id,
-      type: "ONE_TIME",
-      description: "Onboarding & data migration (one-time)",
-      amountPaise: rupees(75000),
-      status: "INVOICED",
-      createdById: admin.id,
-      approvedById: approver.id,
-      approvedAt: subDays(new Date(), 5),
-      dueDate: addDays(new Date(), 3),
-    },
-  });
-  await prisma.invoice.create({
-    data: {
-      number: `ROQ-${new Date().getFullYear()}-0003`,
-      organizationId: zenith.id,
-      transactionId: t3.id,
-      status: "SENT",
-      issueDate: subDays(new Date(), 5),
-      dueDate: addDays(new Date(), 3),
-      subtotalPaise: rupees(75000),
-      taxRatePct: 18,
-      taxPaise: Math.round(rupees(75000) * 0.18),
-      totalPaise: rupees(75000) + Math.round(rupees(75000) * 0.18),
-      lineItems: {
-        create: [{ description: "Onboarding & data migration (one-time)", quantity: 1, unitAmountPaise: rupees(75000), amountPaise: rupees(75000) }],
+      {
+        name: "MSG91", vendorType: "SERVICE", billingFrequency: "MONTHLY_USAGE",
+        currency: "INR", dueDayOfMonth: null, vendorUrl: "https://msg91.com",
+        defaultInrPaise: inr(5600), defaultUsdCents: usd(59), defaultEurCents: eur(51.7),
+        notes: "SMS/OTP. Varies with volume / downloads.",
       },
-    },
+      {
+        name: "Vercel", vendorType: "SERVICE", billingFrequency: "MONTHLY",
+        currency: "USD", dueDayOfMonth: 17, vendorUrl: "https://vercel.com",
+        defaultInrPaise: inr(3812), defaultUsdCents: usd(40), defaultEurCents: eur(35.2),
+        notes: "Frontend hosting. Advance payment.",
+      },
+      {
+        name: "Airtel M2M", vendorType: "SUBSCRIPTION", billingFrequency: "MONTHLY",
+        currency: "INR", dueDayOfMonth: 20, vendorUrl: null,
+        defaultInrPaise: inr(1030), defaultUsdCents: usd(11), defaultEurCents: eur(9.5),
+        notes: "SIM connectivity. Price assumes 10 SIMs active.",
+      },
+      {
+        name: "AWS", vendorType: "SERVICE", billingFrequency: "MONTHLY_USAGE",
+        currency: "USD", dueDayOfMonth: 22, vendorUrl: "https://aws.amazon.com",
+        defaultInrPaise: inr(206282.85), defaultUsdCents: usd(2286.59), defaultEurCents: eur(1949.84),
+        notes: "Cloud infrastructure. Invoice generated monthly.",
+      },
+      {
+        name: "Twilio", vendorType: "SERVICE", billingFrequency: "PAY_AS_YOU_GO",
+        currency: "USD", dueDayOfMonth: null, vendorUrl: "https://twilio.com",
+        defaultInrPaise: inr(4486.75), defaultUsdCents: usd(50), defaultEurCents: eur(42.46),
+        notes: "Voice/SMS. Pay as you go, depends on usage.",
+      },
+      {
+        name: "Figma", vendorType: "SUBSCRIPTION", billingFrequency: "ANNUAL",
+        currency: "USD", dueDayOfMonth: 17, vendorUrl: "https://figma.com",
+        defaultInrPaise: inr(17203.2), defaultUsdCents: usd(192), defaultEurCents: eur(163.89),
+        notes: "Design tool. Annual plan.",
+      },
+    ].map((s) => prisma.service.create({ data: s })),
+  );
+
+  const byName = Object.fromEntries(services.map((s) => [s.name, s]));
+
+  // ---- Helper to create a month's rows -----------------------------------
+  type Row = {
+    service: string;
+    status: "PENDING" | "PAID" | "OVERDUE";
+    paidOn?: Date;
+    dueOverride?: Date | null;
+    inr: number; usd: number; eur: number;
+    paidInr?: number;
+    notes?: string;
+  };
+
+  async function seedMonth(year: number, month: number, rows: Row[]) {
+    for (const r of rows) {
+      const svc = byName[r.service];
+      const due =
+        r.dueOverride !== undefined
+          ? r.dueOverride
+          : svc.dueDayOfMonth
+            ? d(year, month, svc.dueDayOfMonth)
+            : null;
+      await prisma.paymentEntry.create({
+        data: {
+          serviceId: svc.id,
+          serviceName: svc.name,
+          vendorType: svc.vendorType,
+          billingFrequency: svc.billingFrequency,
+          periodYear: year,
+          periodMonth: month,
+          dueDate: due,
+          paymentMadeOn: r.paidOn ?? null,
+          status: r.status,
+          amountInrPaise: inr(r.inr),
+          amountUsdCents: usd(r.usd),
+          amountEurCents: eur(r.eur),
+          thisMonthPaidInrPaise: inr(r.paidInr ?? (r.status === "PAID" ? r.inr : 0)),
+          notes: r.notes ?? svc.notes,
+          createdById: editor.id,
+        },
+      });
+    }
+  }
+
+  // June 2026 — fully settled (historical)
+  await seedMonth(2026, 6, [
+    { service: "Flespi", status: "PAID", paidOn: d(2026, 6, 16), inr: 25702.8, usd: 269, eur: 236 },
+    { service: "GitHub", status: "PAID", paidOn: d(2026, 6, 22), inr: 2287.4, usd: 24, eur: 21.12 },
+    { service: "MSG91", status: "PAID", paidOn: d(2026, 6, 28), inr: 5210, usd: 55, eur: 48 },
+    { service: "Vercel", status: "PAID", paidOn: d(2026, 6, 17), inr: 3812, usd: 40, eur: 35.2 },
+    { service: "Airtel M2M", status: "PAID", paidOn: d(2026, 6, 20), inr: 1030, usd: 11, eur: 9.5 },
+    { service: "AWS", status: "PAID", paidOn: d(2026, 6, 23), inr: 198450.1, usd: 2200, eur: 1875 },
+    { service: "Twilio", status: "PAID", paidOn: d(2026, 6, 12), inr: 4486.75, usd: 50, eur: 42.46 },
+  ]);
+
+  // July 2026 — current month: mostly paid, AWS overdue, MSG91 still pending
+  await seedMonth(2026, 7, [
+    { service: "Flespi", status: "PAID", paidOn: d(2026, 7, 16), inr: 25702.8, usd: 269, eur: 236 },
+    { service: "GitHub", status: "PAID", paidOn: d(2026, 7, 23), inr: 2287.4, usd: 24, eur: 21.12 },
+    { service: "Vercel", status: "PAID", paidOn: d(2026, 7, 17), inr: 3812, usd: 40, eur: 35.2 },
+    { service: "Airtel M2M", status: "PAID", paidOn: d(2026, 7, 20), inr: 1030, usd: 11, eur: 9.5 },
+    { service: "AWS", status: "OVERDUE", inr: 206282.85, usd: 2286.59, eur: 1949.84,
+      notes: "Invoice generated — payment pending." },
+    { service: "MSG91", status: "PENDING", inr: 5600, usd: 59, eur: 51.7 },
+    { service: "Twilio", status: "PENDING", inr: 4102, usd: 46, eur: 39 },
+  ]);
+
+  // August 2026 — upcoming: all pending (some due soon)
+  await seedMonth(2026, 8, [
+    { service: "Flespi", status: "PENDING", inr: 25702.8, usd: 269, eur: 236 },
+    { service: "GitHub", status: "PENDING", inr: 2287.4, usd: 24, eur: 21.12 },
+    { service: "Vercel", status: "PENDING", inr: 3812, usd: 40, eur: 35.2 },
+    { service: "Airtel M2M", status: "PENDING", inr: 1030, usd: 11, eur: 9.5 },
+    { service: "AWS", status: "PENDING", inr: 210000, usd: 2325, eur: 1980 },
+    { service: "MSG91", status: "PENDING", inr: 5600, usd: 59, eur: 51.7 },
+  ]);
+
+  // ---- A couple of example documents (link + note) -----------------------
+  const paidFlespiJul = await prisma.paymentEntry.findFirst({
+    where: { serviceName: "Flespi", periodYear: 2026, periodMonth: 7 },
+  });
+  const paidGithubJul = await prisma.paymentEntry.findFirst({
+    where: { serviceName: "GitHub", periodYear: 2026, periodMonth: 7 },
+  });
+  if (paidFlespiJul) {
+    await prisma.document.create({
+      data: {
+        entryId: paidFlespiJul.id,
+        kind: "LINK",
+        title: "Flespi receipt (Jul 2026)",
+        externalUrl: "https://drive.google.com/roqit-sharedfolder/flespi-2026-07",
+        uploadedById: editor.id,
+      },
+    });
+  }
+  if (paidGithubJul) {
+    await prisma.document.create({
+      data: {
+        entryId: paidGithubJul.id,
+        kind: "LINK",
+        title: "github-AION-TECH-Solutions-LTD-receipt-2026-07.pdf",
+        externalUrl: "https://drive.google.com/roqit-sharedfolder/github-2026-07",
+        uploadedById: editor.id,
+      },
+    });
+  }
+
+  await prisma.auditLog.create({
+    data: { actorId: admin.id, action: "SEED", entity: "System", detail: "Initial demo data loaded" },
   });
 
-  // 4) A transaction PENDING APPROVAL (needs an approver to act)
-  await prisma.transaction.create({
-    data: {
-      organizationId: acme.id,
-      type: "PAY_AS_YOU_GO",
-      description: "Additional storage — 500 GB (this month)",
-      amountPaise: rupees(6200),
-      status: "PENDING_APPROVAL",
-      createdById: admin.id,
-      dueDate: addDays(new Date(), 15),
-    },
-  });
-
-  // 5) A DRAFT transaction (not yet submitted)
-  await prisma.transaction.create({
-    data: {
-      organizationId: zenith.id,
-      type: "ONE_TIME",
-      description: "Custom report build (draft estimate)",
-      amountPaise: rupees(18000),
-      status: "DRAFT",
-      createdById: admin.id,
-    },
-  });
-
-  console.log("Seed complete.");
-  console.log("\nLogin with:");
-  console.log("  admin@roqit.com     / password123  (Admin)");
-  console.log("  approver@roqit.com  / password123  (Approver)");
-  console.log("  viewer@roqit.com    / password123  (Viewer)");
+  console.log("Done. Log in with admin@roqit.com / password123");
 }
 
 main()

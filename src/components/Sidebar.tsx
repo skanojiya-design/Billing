@@ -6,16 +6,16 @@ import { ROLE_LABELS, type Role } from "@/lib/constants";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: "📊" },
-  { href: "/transactions", label: "Transactions", icon: "💳" },
-  { href: "/invoices", label: "Invoices", icon: "🧾" },
-  { href: "/subscriptions", label: "Subscriptions", icon: "🔁" },
-  { href: "/organizations", label: "Organizations", icon: "🏢" },
-  { href: "/plans", label: "Plans", icon: "📦" },
+  { href: "/tracker", label: "Monthly Tracker", icon: "🗓️" },
+  { href: "/services", label: "Services", icon: "🔁" },
+  { href: "/documents", label: "Documents", icon: "📁" },
   { href: "/alerts", label: "Alerts & Email", icon: "🔔" },
+  { href: "/team", label: "Team", icon: "👥", adminOnly: true },
 ];
 
 export function Sidebar({ user }: { user: { name: string; email: string; role: Role } }) {
   const pathname = usePathname();
+  const items = NAV.filter((i) => !i.adminOnly || user.role === "ADMIN");
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-gray-200 bg-white">
@@ -23,12 +23,12 @@ export function Sidebar({ user }: { user: { name: string; email: string; role: R
         <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 text-sm font-bold text-white">r</span>
         <div>
           <p className="text-sm font-semibold leading-tight">roqit Billing</p>
-          <p className="text-[11px] text-gray-400 leading-tight">transactions & invoices</p>
+          <p className="text-[11px] text-gray-400 leading-tight">payment tracker</p>
         </div>
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
-        {NAV.map((item) => {
+        {items.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
             <Link

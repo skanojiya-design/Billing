@@ -4,19 +4,18 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getSessionUser, canApprove, canEdit } from "@/lib/auth";
-import { rupeesToPaise } from "@/lib/money";
 import {
-  generateInvoiceFromTransaction,
-  recomputeInvoiceStatus,
-  runSubscriptionBilling,
-  advanceBillingDate,
-} from "@/lib/billing";
+  getSessionUser,
+  canEdit,
+  assertCanEdit,
+  assertCanManageUsers,
+  hashPassword,
+} from "@/lib/auth";
+import { majorToMinor } from "@/lib/money";
+import { generateEntriesForPeriod, dueDateFor } from "@/lib/entries";
+import { saveUpload, deleteUpload } from "@/lib/storage";
 import { runAlerts } from "@/lib/alerts";
-import { flushOutbox, queueEmail } from "@/lib/email";
-import { formatPaise } from "@/lib/money";
-import { addDays } from "date-fns";
-import type { Interval } from "@/lib/constants";
+import { flushOutbox } from "@/lib/email";
 
 async function requireUser() {
   const user = await getSessionUser();
@@ -24,261 +23,309 @@ async function requireUser() {
   return user;
 }
 
+async function requireEditor() {
+  const user = await requireUser();
+  assertCanEdit(user.role);
+  return user;
+}
+
 async function audit(actorId: string, action: string, entity: string, entityId?: string, detail?: string) {
   await prisma.auditLog.create({ data: { actorId, action, entity, entityId, detail } });
 }
 
-// --------------------------------------------------------------------------
-// Organizations
-// --------------------------------------------------------------------------
-const orgSchema = z.object({
-  name: z.string().min(1),
-  contactName: z.string().optional(),
-  contactEmail: z.string().email(),
-  phone: z.string().optional(),
-  gstin: z.string().optional(),
-  billingAddress: z.string().optional(),
-  notes: z.string().optional(),
-});
-
-export async function createOrganization(formData: FormData) {
-  const user = await requireUser();
-  if (!canEdit(user.role)) throw new Error("You do not have permission to do this.");
-  const data = orgSchema.parse(Object.fromEntries(formData));
-  const org = await prisma.organization.create({ data });
-  await audit(user.id, "create", "Organization", org.id, org.name);
-  revalidatePath("/organizations");
-  redirect(`/organizations/${org.id}`);
+function trackerPath(year: number, month: number) {
+  return `/tracker?y=${year}&m=${month}`;
 }
 
 // --------------------------------------------------------------------------
-// Transactions
+// Services (recurring vendor definitions)
 // --------------------------------------------------------------------------
-const txSchema = z.object({
-  organizationId: z.string().min(1),
-  type: z.enum(["SUBSCRIPTION", "PAY_AS_YOU_GO", "ONE_TIME"]),
-  description: z.string().min(1),
-  amountRupees: z.coerce.number().positive(),
+const serviceSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, "Name is required"),
+  vendorType: z.enum(["SUBSCRIPTION", "SERVICE"]),
+  billingFrequency: z.enum(["MONTHLY", "ANNUAL", "MONTHLY_USAGE", "PAY_AS_YOU_GO", "ONE_TIME"]),
+  currency: z.enum(["INR", "USD", "EUR"]),
+  dueDayOfMonth: z.coerce.number().int().min(1).max(31).optional().or(z.literal(NaN)),
+  defaultInr: z.coerce.number().min(0).default(0),
+  defaultUsd: z.coerce.number().min(0).default(0),
+  defaultEur: z.coerce.number().min(0).default(0),
+  vendorUrl: z.string().optional(),
+  notes: z.string().optional(),
+  active: z.coerce.boolean().optional(),
+});
+
+export async function saveService(formData: FormData) {
+  const user = await requireEditor();
+  const raw = Object.fromEntries(formData) as Record<string, string>;
+  const parsed = serviceSchema.parse({ ...raw, active: raw.active === "on" || raw.active === "true" });
+
+  const data = {
+    name: parsed.name.trim(),
+    vendorType: parsed.vendorType,
+    billingFrequency: parsed.billingFrequency,
+    currency: parsed.currency,
+    dueDayOfMonth: Number.isFinite(parsed.dueDayOfMonth) ? parsed.dueDayOfMonth : null,
+    defaultInrPaise: majorToMinor(parsed.defaultInr),
+    defaultUsdCents: majorToMinor(parsed.defaultUsd),
+    defaultEurCents: majorToMinor(parsed.defaultEur),
+    vendorUrl: parsed.vendorUrl?.trim() || null,
+    notes: parsed.notes?.trim() || null,
+    active: parsed.active ?? true,
+  };
+
+  if (parsed.id) {
+    await prisma.service.update({ where: { id: parsed.id }, data });
+    await audit(user.id, "UPDATE", "Service", parsed.id, data.name);
+  } else {
+    const created = await prisma.service.create({ data });
+    await audit(user.id, "CREATE", "Service", created.id, data.name);
+  }
+  revalidatePath("/services");
+  redirect("/services");
+}
+
+export async function toggleServiceActive(id: string) {
+  const user = await requireEditor();
+  const svc = await prisma.service.findUnique({ where: { id } });
+  if (!svc) throw new Error("Service not found");
+  await prisma.service.update({ where: { id }, data: { active: !svc.active } });
+  await audit(user.id, svc.active ? "DEACTIVATE" : "ACTIVATE", "Service", id, svc.name);
+  revalidatePath("/services");
+}
+
+// --------------------------------------------------------------------------
+// Payment entries (the monthly rows)
+// --------------------------------------------------------------------------
+const entrySchema = z.object({
+  id: z.string().optional(),
+  serviceId: z.string().optional(),
+  serviceName: z.string().min(1, "Service is required"),
+  vendorType: z.enum(["SUBSCRIPTION", "SERVICE"]),
+  billingFrequency: z.enum(["MONTHLY", "ANNUAL", "MONTHLY_USAGE", "PAY_AS_YOU_GO", "ONE_TIME"]),
+  periodYear: z.coerce.number().int(),
+  periodMonth: z.coerce.number().int().min(1).max(12),
+  status: z.enum(["PENDING", "PAID", "OVERDUE"]),
   dueDate: z.string().optional(),
-  submit: z.string().optional(), // "1" to submit for approval immediately
-});
-
-export async function createTransaction(formData: FormData) {
-  const user = await requireUser();
-  if (!canEdit(user.role)) throw new Error("You do not have permission to do this.");
-  const raw = Object.fromEntries(formData);
-  const data = txSchema.parse(raw);
-  const tx = await prisma.transaction.create({
-    data: {
-      organizationId: data.organizationId,
-      type: data.type,
-      description: data.description,
-      amountPaise: rupeesToPaise(data.amountRupees),
-      status: data.submit === "1" ? "PENDING_APPROVAL" : "DRAFT",
-      dueDate: data.dueDate ? new Date(data.dueDate) : null,
-      createdById: user.id,
-    },
-  });
-  await audit(user.id, "create", "Transaction", tx.id, `${data.type} ${formatPaise(tx.amountPaise)}`);
-  revalidatePath("/transactions");
-  redirect(`/transactions`);
-}
-
-export async function submitForApproval(formData: FormData) {
-  const user = await requireUser();
-  const id = String(formData.get("id"));
-  await prisma.transaction.update({ where: { id }, data: { status: "PENDING_APPROVAL" } });
-  await audit(user.id, "submit", "Transaction", id);
-  revalidatePath("/transactions");
-}
-
-export async function approveTransaction(formData: FormData) {
-  const user = await requireUser();
-  if (!canApprove(user.role)) throw new Error("Only approvers or admins can approve.");
-  const id = String(formData.get("id"));
-  await prisma.transaction.update({
-    where: { id },
-    data: { status: "APPROVED", approvedById: user.id, approvedAt: new Date() },
-  });
-  await audit(user.id, "approve", "Transaction", id);
-  revalidatePath("/transactions");
-}
-
-export async function rejectTransaction(formData: FormData) {
-  const user = await requireUser();
-  if (!canApprove(user.role)) throw new Error("Only approvers or admins can reject.");
-  const id = String(formData.get("id"));
-  const reason = String(formData.get("reason") || "");
-  await prisma.transaction.update({
-    where: { id },
-    data: { status: "REJECTED", rejectedReason: reason || null },
-  });
-  await audit(user.id, "reject", "Transaction", id, reason);
-  revalidatePath("/transactions");
-}
-
-// --------------------------------------------------------------------------
-// Invoices
-// --------------------------------------------------------------------------
-const genInvoiceSchema = z.object({
-  transactionId: z.string().min(1),
-  taxRatePct: z.coerce.number().min(0).max(100),
-  dueInDays: z.coerce.number().int().min(0).max(365),
+  paymentMadeOn: z.string().optional(),
+  amountInr: z.coerce.number().min(0).default(0),
+  amountUsd: z.coerce.number().min(0).default(0),
+  amountEur: z.coerce.number().min(0).default(0),
+  thisMonthPaidInr: z.coerce.number().min(0).default(0),
   notes: z.string().optional(),
 });
 
-export async function createInvoice(formData: FormData) {
-  const user = await requireUser();
-  if (!canEdit(user.role)) throw new Error("You do not have permission to do this.");
-  const data = genInvoiceSchema.parse(Object.fromEntries(formData));
-  const invoice = await generateInvoiceFromTransaction({
-    transactionId: data.transactionId,
-    taxRatePct: data.taxRatePct,
-    dueDate: addDays(new Date(), data.dueInDays),
-    notes: data.notes,
-  });
-  await audit(user.id, "create", "Invoice", invoice.id, invoice.number);
-  revalidatePath("/invoices");
-  revalidatePath("/transactions");
-  redirect(`/invoices/${invoice.id}`);
+function parseDate(s?: string): Date | null {
+  if (!s) return null;
+  const dt = new Date(s);
+  return isNaN(dt.getTime()) ? null : dt;
 }
 
-export async function sendInvoice(formData: FormData) {
-  const user = await requireUser();
-  const id = String(formData.get("id"));
-  const inv = await prisma.invoice.findUnique({ where: { id }, include: { organization: true } });
-  if (!inv) throw new Error("Invoice not found");
-  await prisma.invoice.update({ where: { id }, data: { status: "SENT" } });
-  await queueEmail({
-    toEmail: inv.organization.contactEmail,
-    toName: inv.organization.contactName,
-    type: "INVOICE_SENT",
-    invoiceId: inv.id,
-    subject: `Invoice ${inv.number} from roqit — ${formatPaise(inv.totalPaise)}`,
-    body:
-      `Hi ${inv.organization.name},\n\n` +
-      `Please find invoice ${inv.number} for ${formatPaise(inv.totalPaise)}, due on ${inv.dueDate.toDateString()}.\n\n` +
-      `Thank you,\nroqit Billing`,
-  });
-  await audit(user.id, "send", "Invoice", id, inv.number);
-  revalidatePath(`/invoices/${id}`);
-  revalidatePath("/invoices");
-  revalidatePath("/alerts");
+export async function saveEntry(formData: FormData) {
+  const user = await requireEditor();
+  const raw = Object.fromEntries(formData) as Record<string, string>;
+  const p = entrySchema.parse(raw);
+
+  const data = {
+    serviceId: p.serviceId || null,
+    serviceName: p.serviceName.trim(),
+    vendorType: p.vendorType,
+    billingFrequency: p.billingFrequency,
+    periodYear: p.periodYear,
+    periodMonth: p.periodMonth,
+    status: p.status,
+    dueDate: parseDate(p.dueDate),
+    paymentMadeOn: parseDate(p.paymentMadeOn),
+    amountInrPaise: majorToMinor(p.amountInr),
+    amountUsdCents: majorToMinor(p.amountUsd),
+    amountEurCents: majorToMinor(p.amountEur),
+    thisMonthPaidInrPaise: majorToMinor(p.thisMonthPaidInr),
+    notes: p.notes?.trim() || null,
+  };
+
+  if (p.id) {
+    await prisma.paymentEntry.update({ where: { id: p.id }, data });
+    await audit(user.id, "UPDATE", "PaymentEntry", p.id, `${data.serviceName} ${p.periodMonth}/${p.periodYear}`);
+  } else {
+    const created = await prisma.paymentEntry.create({ data: { ...data, createdById: user.id } });
+    await audit(user.id, "CREATE", "PaymentEntry", created.id, `${data.serviceName} ${p.periodMonth}/${p.periodYear}`);
+  }
+  revalidatePath(trackerPath(p.periodYear, p.periodMonth));
+  redirect(trackerPath(p.periodYear, p.periodMonth));
 }
 
-const paymentSchema = z.object({
-  invoiceId: z.string().min(1),
-  amountRupees: z.coerce.number().positive(),
-  method: z.enum(["BANK_TRANSFER", "UPI", "CARD", "CASH", "CHEQUE", "OTHER"]),
-  reference: z.string().optional(),
-});
-
-export async function recordPayment(formData: FormData) {
-  const user = await requireUser();
-  if (!canEdit(user.role)) throw new Error("You do not have permission to do this.");
-  const data = paymentSchema.parse(Object.fromEntries(formData));
-  await prisma.payment.create({
+/** Quick "mark paid" — sets status PAID, paidOn today, and this-month-paid to the INR amount. */
+export async function markPaid(id: string) {
+  const user = await requireEditor();
+  const entry = await prisma.paymentEntry.findUnique({ where: { id } });
+  if (!entry) throw new Error("Row not found");
+  await prisma.paymentEntry.update({
+    where: { id },
     data: {
-      invoiceId: data.invoiceId,
-      amountPaise: rupeesToPaise(data.amountRupees),
-      method: data.method,
-      reference: data.reference || null,
-      recordedBy: user.name,
+      status: "PAID",
+      paymentMadeOn: new Date(),
+      thisMonthPaidInrPaise: entry.thisMonthPaidInrPaise || entry.amountInrPaise,
     },
   });
-  await recomputeInvoiceStatus(data.invoiceId);
-  await audit(user.id, "payment", "Invoice", data.invoiceId, `${formatPaise(rupeesToPaise(data.amountRupees))} via ${data.method}`);
-  revalidatePath(`/invoices/${data.invoiceId}`);
-  revalidatePath("/invoices");
-  revalidatePath("/");
+  await audit(user.id, "MARK_PAID", "PaymentEntry", id, entry.serviceName);
+  revalidatePath(trackerPath(entry.periodYear, entry.periodMonth));
+}
+
+export async function markPending(id: string) {
+  const user = await requireEditor();
+  const entry = await prisma.paymentEntry.findUnique({ where: { id } });
+  if (!entry) throw new Error("Row not found");
+  await prisma.paymentEntry.update({
+    where: { id },
+    data: { status: "PENDING", paymentMadeOn: null, thisMonthPaidInrPaise: 0 },
+  });
+  await audit(user.id, "MARK_PENDING", "PaymentEntry", id, entry.serviceName);
+  revalidatePath(trackerPath(entry.periodYear, entry.periodMonth));
+}
+
+export async function deleteEntry(id: string) {
+  const user = await requireEditor();
+  const entry = await prisma.paymentEntry.findUnique({ where: { id } });
+  if (!entry) return;
+  await prisma.paymentEntry.delete({ where: { id } });
+  await audit(user.id, "DELETE", "PaymentEntry", id, entry.serviceName);
+  revalidatePath(trackerPath(entry.periodYear, entry.periodMonth));
+}
+
+/** Generate this-period rows from active services. Returns via redirect. */
+export async function generateMonth(formData: FormData) {
+  await requireEditor();
+  const user = await getSessionUser();
+  const year = Number(formData.get("year"));
+  const month = Number(formData.get("month"));
+  const created = await generateEntriesForPeriod(year, month, user?.id);
+  if (user) await audit(user.id, "GENERATE_MONTH", "PaymentEntry", undefined, `${created} rows for ${month}/${year}`);
+  revalidatePath(trackerPath(year, month));
+  redirect(trackerPath(year, month));
 }
 
 // --------------------------------------------------------------------------
-// Plans & Subscriptions
+// Documents (invoices / receipts)
 // --------------------------------------------------------------------------
-const planSchema = z.object({
+export async function addDocument(formData: FormData) {
+  const user = await requireEditor();
+  const entryId = String(formData.get("entryId") || "");
+  const entry = await prisma.paymentEntry.findUnique({ where: { id: entryId } });
+  if (!entry) throw new Error("Row not found");
+
+  const kind = String(formData.get("kind") || "FILE");
+  const title = String(formData.get("title") || "").trim();
+
+  if (kind === "LINK") {
+    const url = String(formData.get("externalUrl") || "").trim();
+    if (!url) throw new Error("Please provide a link.");
+    await prisma.document.create({
+      data: {
+        entryId,
+        kind: "LINK",
+        title: title || url,
+        externalUrl: url,
+        uploadedById: user.id,
+      },
+    });
+  } else {
+    const file = formData.get("file") as File | null;
+    if (!file || file.size === 0) throw new Error("Please choose a file to upload.");
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const storedName = await saveUpload(file.name, bytes);
+    await prisma.document.create({
+      data: {
+        entryId,
+        kind: "FILE",
+        title: title || file.name,
+        originalName: file.name,
+        storedName,
+        mimeType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+        uploadedById: user.id,
+      },
+    });
+  }
+  await audit(user.id, "ADD_DOCUMENT", "PaymentEntry", entryId, title);
+  revalidatePath(trackerPath(entry.periodYear, entry.periodMonth));
+  revalidatePath("/documents");
+  redirect(trackerPath(entry.periodYear, entry.periodMonth));
+}
+
+export async function deleteDocument(id: string) {
+  const user = await requireEditor();
+  const doc = await prisma.document.findUnique({ where: { id }, include: { entry: true } });
+  if (!doc) return;
+  if (doc.kind === "FILE" && doc.storedName) await deleteUpload(doc.storedName);
+  await prisma.document.delete({ where: { id } });
+  await audit(user.id, "DELETE_DOCUMENT", "Document", id, doc.title);
+  if (doc.entry) revalidatePath(trackerPath(doc.entry.periodYear, doc.entry.periodMonth));
+  revalidatePath("/documents");
+}
+
+// --------------------------------------------------------------------------
+// Team members (admin only)
+// --------------------------------------------------------------------------
+const userSchema = z.object({
+  id: z.string().optional(),
   name: z.string().min(1),
-  description: z.string().optional(),
-  amountRupees: z.coerce.number().positive(),
-  interval: z.enum(["MONTHLY", "QUARTERLY", "YEARLY"]),
+  email: z.string().email(),
+  role: z.enum(["ADMIN", "EDITOR", "VIEWER"]),
+  password: z.string().optional(),
 });
 
-export async function createPlan(formData: FormData) {
-  const user = await requireUser();
-  if (!canEdit(user.role)) throw new Error("You do not have permission to do this.");
-  const data = planSchema.parse(Object.fromEntries(formData));
-  const plan = await prisma.plan.create({
-    data: {
-      name: data.name,
-      description: data.description,
-      amountPaise: rupeesToPaise(data.amountRupees),
-      interval: data.interval,
-    },
-  });
-  await audit(user.id, "create", "Plan", plan.id, plan.name);
-  revalidatePath("/plans");
-  redirect("/plans");
+export async function saveUser(formData: FormData) {
+  const actor = await requireUser();
+  assertCanManageUsers(actor.role);
+  const p = userSchema.parse(Object.fromEntries(formData));
+  const email = p.email.toLowerCase().trim();
+
+  if (p.id) {
+    const data: Record<string, unknown> = { name: p.name.trim(), email, role: p.role };
+    if (p.password && p.password.length >= 6) data.passwordHash = await hashPassword(p.password);
+    await prisma.user.update({ where: { id: p.id }, data });
+    await audit(actor.id, "UPDATE", "User", p.id, email);
+  } else {
+    if (!p.password || p.password.length < 6) throw new Error("Password must be at least 6 characters.");
+    const created = await prisma.user.create({
+      data: { name: p.name.trim(), email, role: p.role, passwordHash: await hashPassword(p.password) },
+    });
+    await audit(actor.id, "CREATE", "User", created.id, email);
+  }
+  revalidatePath("/team");
+  redirect("/team");
 }
 
-const subSchema = z.object({
-  organizationId: z.string().min(1),
-  planId: z.string().min(1),
-  amountRupees: z.coerce.number().positive(),
-  startDate: z.string().min(1),
-});
-
-export async function createSubscription(formData: FormData) {
-  const user = await requireUser();
-  if (!canEdit(user.role)) throw new Error("You do not have permission to do this.");
-  const data = subSchema.parse(Object.fromEntries(formData));
-  const plan = await prisma.plan.findUnique({ where: { id: data.planId } });
-  if (!plan) throw new Error("Plan not found");
-  const start = new Date(data.startDate);
-  const sub = await prisma.subscription.create({
-    data: {
-      organizationId: data.organizationId,
-      planId: data.planId,
-      amountPaise: rupeesToPaise(data.amountRupees),
-      interval: plan.interval,
-      startDate: start,
-      nextBillingDate: advanceBillingDate(start, plan.interval as Interval),
-    },
-  });
-  await audit(user.id, "create", "Subscription", sub.id);
-  revalidatePath("/subscriptions");
-  redirect("/subscriptions");
-}
-
-export async function setSubscriptionStatus(formData: FormData) {
-  const user = await requireUser();
-  if (!canEdit(user.role)) throw new Error("You do not have permission to do this.");
-  const id = String(formData.get("id"));
-  const status = String(formData.get("status"));
-  await prisma.subscription.update({ where: { id }, data: { status } });
-  await audit(user.id, "status", "Subscription", id, status);
-  revalidatePath("/subscriptions");
+export async function toggleUserActive(id: string) {
+  const actor = await requireUser();
+  assertCanManageUsers(actor.role);
+  if (id === actor.id) throw new Error("You can't deactivate your own account.");
+  const u = await prisma.user.findUnique({ where: { id } });
+  if (!u) return;
+  await prisma.user.update({ where: { id }, data: { active: !u.active } });
+  await audit(actor.id, u.active ? "DEACTIVATE" : "ACTIVATE", "User", id, u.email);
+  revalidatePath("/team");
 }
 
 // --------------------------------------------------------------------------
-// Automation
+// Alerts
 // --------------------------------------------------------------------------
-export async function runAlertsAction(): Promise<{ message: string }> {
-  await requireUser();
-  const a = await runAlerts();
-  const f = await flushOutbox();
+export async function runAlertsAction() {
+  const user = await requireUser();
+  if (!canEdit(user.role)) throw new Error("Only editors/admins can run alerts.");
+  const r = await runAlerts();
+  await audit(user.id, "RUN_ALERTS", "System", undefined, JSON.stringify(r));
   revalidatePath("/alerts");
-  revalidatePath("/invoices");
-  revalidatePath("/");
   return {
-    message: `Overdue: ${a.markedOverdue} · Reminders queued: ${a.dueSoonQueued + a.overdueQueued} · Emails sent: ${f.sent}`,
+    message: `Marked ${r.markedOverdue} overdue · queued ${r.dueSoonQueued} due-soon + ${r.overdueQueued} overdue reminders.`,
   };
 }
 
-export async function runBillingAction(): Promise<{ message: string }> {
+export async function flushOutboxAction() {
   const user = await requireUser();
-  if (!canEdit(user.role)) throw new Error("You do not have permission to do this.");
-  const raised = await runSubscriptionBilling(user.id);
-  revalidatePath("/transactions");
-  revalidatePath("/subscriptions");
-  return { message: raised > 0 ? `Raised ${raised} charge(s) for approval.` : "Nothing due right now." };
+  if (!canEdit(user.role)) throw new Error("Only editors/admins can send email.");
+  const r = await flushOutbox();
+  await audit(user.id, "FLUSH_OUTBOX", "System", undefined, JSON.stringify(r));
+  revalidatePath("/alerts");
+  return { message: `Sent ${r.sent} email(s)${r.failed ? `, ${r.failed} failed` : ""}.` };
 }

@@ -1,142 +1,125 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { formatPaiseCompact, formatPaise } from "@/lib/money";
-import { PageHeader, Stat, StatusBadge } from "@/components/ui";
-import { RunButton } from "@/components/RunButton";
-import { runAlertsAction, runBillingAction } from "@/app/actions";
-import { INTERVAL_MONTHS, TRANSACTION_TYPE_LABELS, type Interval } from "@/lib/constants";
-import { startOfMonth, subMonths, format, isSameMonth } from "date-fns";
+import { formatMoney, formatMoneyCompact } from "@/lib/money";
+import { monthLabel, MONTH_NAMES } from "@/lib/constants";
+import { PageHeader, Stat, StatusBadge, Money } from "@/components/ui";
+import { format } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+function currentPeriod() {
   const now = new Date();
+  return { year: now.getFullYear(), month: now.getMonth() + 1 };
+}
 
-  const [subs, openInvoices, pendingCount, payments, recentTx] = await Promise.all([
-    prisma.subscription.findMany({ where: { status: "ACTIVE" } }),
-    prisma.invoice.findMany({ where: { status: { in: ["SENT", "PARTIALLY_PAID", "OVERDUE"] } } }),
-    prisma.transaction.count({ where: { status: "PENDING_APPROVAL" } }),
-    prisma.payment.findMany({ where: { paidAt: { gte: startOfMonth(subMonths(now, 5)) } } }),
-    prisma.transaction.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 6,
-      include: { organization: true },
-    }),
-  ]);
+export default async function DashboardPage() {
+  const { year, month } = currentPeriod();
 
-  // MRR: normalize each active subscription to a monthly figure.
-  const mrr = subs.reduce((s, sub) => s + Math.round(sub.amountPaise / INTERVAL_MONTHS[sub.interval as Interval]), 0);
+  const entries = await prisma.paymentEntry.findMany({
+    where: { periodYear: year, periodMonth: month },
+    orderBy: { serviceName: "asc" },
+  });
 
-  const outstanding = openInvoices.reduce((s, inv) => s + (inv.totalPaise - inv.amountPaidPaise), 0);
-  const overdue = openInvoices
-    .filter((inv) => inv.status === "OVERDUE")
-    .reduce((s, inv) => s + (inv.totalPaise - inv.amountPaidPaise), 0);
+  const totalInr = entries.reduce((s, e) => s + e.amountInrPaise, 0);
+  const paidInr = entries.reduce((s, e) => s + e.thisMonthPaidInrPaise, 0);
+  const pending = entries.filter((e) => e.status === "PENDING");
+  const overdue = entries.filter((e) => e.status === "OVERDUE");
+  const outstandingInr = entries
+    .filter((e) => e.status !== "PAID")
+    .reduce((s, e) => s + e.amountInrPaise, 0);
 
-  const revenueThisMonth = payments
-    .filter((p) => isSameMonth(p.paidAt, now))
-    .reduce((s, p) => s + p.amountPaise, 0);
+  // Last 6 months of "paid" totals for the mini chart.
+  const chart: { year: number; month: number; paid: number }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const dt = new Date(year, month - 1 - i, 1);
+    const y = dt.getFullYear();
+    const m = dt.getMonth() + 1;
+    const rows = await prisma.paymentEntry.aggregate({
+      where: { periodYear: y, periodMonth: m },
+      _sum: { thisMonthPaidInrPaise: true },
+    });
+    chart.push({ year: y, month: m, paid: rows._sum.thisMonthPaidInrPaise ?? 0 });
+  }
+  const maxPaid = Math.max(1, ...chart.map((c) => c.paid));
 
-  // Month-on-month revenue for the last 6 months.
-  const months = Array.from({ length: 6 }, (_, i) => startOfMonth(subMonths(now, 5 - i)));
-  const monthly = months.map((m) => ({
-    label: format(m, "MMM"),
-    total: payments.filter((p) => isSameMonth(p.paidAt, m)).reduce((s, p) => s + p.amountPaise, 0),
-  }));
-  const maxMonth = Math.max(1, ...monthly.map((m) => m.total));
+  // Items needing attention across all months (overdue + unpaid with a due date).
+  const attention = await prisma.paymentEntry.findMany({
+    where: { status: { in: ["OVERDUE", "PENDING"] }, dueDate: { not: null } },
+    orderBy: { dueDate: "asc" },
+    take: 8,
+  });
 
   return (
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle={`Everything across your organizations · ${format(now, "MMMM yyyy")}`}
+        subtitle={`Recurring payments overview — ${monthLabel(year, month)}`}
+        action={
+          <Link href={`/tracker?y=${year}&m=${month}`} className="btn-primary">
+            Open this month
+          </Link>
+        }
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="MRR (recurring / mo)" value={formatPaiseCompact(mrr)} hint={`${subs.length} active subscriptions`} tone="success" href="/subscriptions" />
-        <Stat label="Collected this month" value={formatPaiseCompact(revenueThisMonth)} hint={format(now, "MMMM yyyy")} />
-        <Stat label="Outstanding" value={formatPaiseCompact(outstanding)} hint={`${openInvoices.length} open invoices`} tone="warning" href="/invoices" />
-        <Stat label="Overdue" value={formatPaiseCompact(overdue)} hint="past due date" tone={overdue > 0 ? "danger" : "default"} href="/invoices?status=OVERDUE" />
+        <Stat label="Billed this month (INR)" value={formatMoneyCompact(totalInr, "INR")} href={`/tracker?y=${year}&m=${month}`} />
+        <Stat label="Paid this month (INR)" value={formatMoneyCompact(paidInr, "INR")} tone="success" />
+        <Stat label="Outstanding (INR)" value={formatMoneyCompact(outstandingInr, "INR")} tone={outstandingInr > 0 ? "warning" : "default"} />
+        <Stat
+          label="Overdue"
+          value={String(overdue.length)}
+          hint={pending.length ? `${pending.length} pending` : undefined}
+          tone={overdue.length ? "danger" : "default"}
+        />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        {/* Month-on-month chart */}
-        <div className="card p-6 lg:col-span-2">
-          <h2 className="text-sm font-semibold text-gray-900">Revenue collected — last 6 months</h2>
-          <div className="mt-6 flex h-48 items-end gap-4">
-            {monthly.map((m) => (
-              <div key={m.label} className="flex flex-1 flex-col items-center gap-2">
-                <div className="flex w-full flex-1 items-end">
+      <div className="mt-6 grid gap-6 lg:grid-cols-5">
+        {/* Chart */}
+        <div className="card p-5 lg:col-span-3">
+          <p className="text-sm font-medium text-gray-900">Paid per month (INR)</p>
+          <div className="mt-6 flex items-end justify-between gap-3" style={{ height: 160 }}>
+            {chart.map((c) => (
+              <div key={`${c.year}-${c.month}`} className="flex flex-1 flex-col items-center gap-2">
+                <div className="flex w-full items-end justify-center" style={{ height: 120 }}>
                   <div
-                    className="w-full rounded-t-md bg-brand-500 transition-all"
-                    style={{ height: `${Math.max(4, (m.total / maxMonth) * 100)}%` }}
-                    title={formatPaise(m.total)}
+                    className="w-8 rounded-t bg-brand-500"
+                    style={{ height: `${Math.round((c.paid / maxPaid) * 120)}px` }}
+                    title={formatMoney(c.paid, "INR")}
                   />
                 </div>
-                <span className="text-xs font-medium text-gray-600">{m.label}</span>
-                <span className="text-[11px] text-gray-400">{formatPaiseCompact(m.total)}</span>
+                <span className="text-[11px] text-gray-500">{MONTH_NAMES[c.month - 1].slice(0, 3)}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Action center */}
-        <div className="card p-6">
-          <h2 className="text-sm font-semibold text-gray-900">Action center</h2>
-          <div className="mt-4 space-y-4">
-            <Link href="/transactions?status=PENDING_APPROVAL" className="flex items-center justify-between rounded-lg bg-amber-50 px-4 py-3">
-              <span className="text-sm font-medium text-amber-900">Pending approvals</span>
-              <span className="badge bg-amber-200 text-amber-900">{pendingCount}</span>
-            </Link>
-
-            <div>
-              <p className="mb-1 text-xs font-medium text-gray-500">Run recurring billing</p>
-              <RunButton
-                action={runBillingAction}
-                label="Raise due subscription charges"
-                className="btn-secondary w-full"
-              />
-            </div>
-
-            <div>
-              <p className="mb-1 text-xs font-medium text-gray-500">Check deadlines & email alerts</p>
-              <RunButton
-                action={runAlertsAction}
-                label="Run alerts now"
-                className="btn-primary w-full"
-              />
-            </div>
-          </div>
+        {/* Needs attention */}
+        <div className="card p-5 lg:col-span-2">
+          <p className="text-sm font-medium text-gray-900">Needs attention</p>
+          {attention.length === 0 ? (
+            <p className="mt-3 text-sm text-gray-500">Nothing outstanding. 🎉</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-gray-100">
+              {attention.map((e) => (
+                <li key={e.id} className="flex items-center justify-between gap-2 py-2">
+                  <Link href={`/tracker?y=${e.periodYear}&m=${e.periodMonth}`} className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-900">{e.serviceName}</p>
+                    <p className="text-xs text-gray-500">
+                      {monthLabel(e.periodYear, e.periodMonth)}
+                      {e.dueDate ? ` · due ${format(e.dueDate, "d MMM")}` : ""}
+                    </p>
+                  </Link>
+                  <div className="flex flex-col items-end gap-1">
+                    <StatusBadge status={e.status} />
+                    <span className="text-xs text-gray-600">
+                      <Money minor={e.amountInrPaise} currency="INR" />
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      </div>
-
-      {/* Recent activity */}
-      <div className="card mt-6 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h2 className="text-sm font-semibold text-gray-900">Recent transactions</h2>
-          <Link href="/transactions" className="text-sm font-medium text-brand-600 hover:text-brand-700">View all →</Link>
-        </div>
-        <table className="w-full">
-          <thead className="border-b border-gray-100 bg-gray-50">
-            <tr>
-              <th className="th">Organization</th>
-              <th className="th">Type</th>
-              <th className="th">Description</th>
-              <th className="th text-right">Amount</th>
-              <th className="th">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {recentTx.map((t) => (
-              <tr key={t.id}>
-                <td className="td font-medium text-gray-900">{t.organization.name}</td>
-                <td className="td">{TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS]}</td>
-                <td className="td">{t.description}</td>
-                <td className="td text-right tabular-nums">{formatPaise(t.amountPaise)}</td>
-                <td className="td"><StatusBadge status={t.status} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );

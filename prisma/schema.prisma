@@ -1,7 +1,16 @@
-// roqit Billing — data model
+// roqit Billing — internal recurring-payment tracker
+//
+// This replaces the old customer-billing model. The company (ROQIT) uses this
+// to track the vendors/services IT PAYS every month (GitHub, AWS, Flespi,
+// Twilio, …) — exactly like the "ROQIT_Recurring_Payment_Tracker" spreadsheet,
+// but multi-user, with roles, and a searchable document library.
+//
 // NOTE: enum-like fields are stored as plain strings because SQLite (the default
-// dev database) does not support native enums. The allowed values live in
-// src/lib/constants.ts so switching to Postgres later is trivial.
+// dev database) has no native enums. The allowed values live in
+// src/lib/constants.ts, so switching to Postgres enums later is trivial.
+//
+// Money is stored as integer minor units (paise for INR, cents for USD/EUR) to
+// avoid floating-point rounding. See src/lib/money.ts.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,165 +22,108 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// Staff who log in to operate the system
+// Office members who log in. Roles: ADMIN | EDITOR | VIEWER
 // ---------------------------------------------------------------------------
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String
   passwordHash String
-  role         String   @default("VIEWER") // ADMIN | APPROVER | VIEWER
+  role         String   @default("VIEWER") // ADMIN | EDITOR | VIEWER
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  createdTransactions  Transaction[] @relation("TransactionCreatedBy")
-  approvedTransactions Transaction[] @relation("TransactionApprovedBy")
-  auditLogs            AuditLog[]
+  createdEntries    PaymentEntry[] @relation("EntryCreatedBy")
+  uploadedDocuments Document[]
+  auditLogs         AuditLog[]
 }
 
 // ---------------------------------------------------------------------------
-// The account everything rolls up to
+// A recurring vendor/service the company pays. This is the reusable template
+// from which each month's rows are generated.
 // ---------------------------------------------------------------------------
-model Organization {
+model Service {
+  id               String   @id @default(cuid())
+  name             String // "GitHub", "AWS", "Flespi", …
+  vendorType       String   @default("SUBSCRIPTION") // SUBSCRIPTION | SERVICE
+  billingFrequency String   @default("MONTHLY") // MONTHLY | ANNUAL | MONTHLY_USAGE | PAY_AS_YOU_GO | ONE_TIME
+  currency         String   @default("INR") // primary currency the vendor charges in: INR | USD | EUR
+  dueDayOfMonth    Int? // e.g. 20 → due on the 20th; used to auto-fill due dates
+  // Optional default amounts (minor units) used to pre-fill a new month's entry.
+  defaultInrPaise  Int      @default(0)
+  defaultUsdCents  Int      @default(0)
+  defaultEurCents  Int      @default(0)
+  vendorUrl        String?
+  notes            String?
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  entries PaymentEntry[]
+}
+
+// ---------------------------------------------------------------------------
+// One row per service per month — the heart of the tracker. Mirrors a row of
+// the spreadsheet. Values are snapshotted from the Service at generation time
+// so later edits to the Service don't rewrite history.
+// ---------------------------------------------------------------------------
+model PaymentEntry {
+  id               String    @id @default(cuid())
+  serviceId        String?
+  // Snapshot of the service at the time the row was created.
+  serviceName      String
+  vendorType       String    @default("SUBSCRIPTION")
+  billingFrequency String    @default("MONTHLY")
+  // Accounting period this row belongs to.
+  periodYear       Int
+  periodMonth      Int // 1-12
+  dueDate          DateTime?
+  paymentMadeOn    DateTime?
+  status           String    @default("PENDING") // PENDING | PAID | OVERDUE
+  // Amounts across the three currencies (minor units). A row may use one or all.
+  amountInrPaise        Int  @default(0)
+  amountUsdCents        Int  @default(0)
+  amountEurCents        Int  @default(0)
+  // What was actually paid this month, in INR (the spreadsheet's key column).
+  thisMonthPaidInrPaise Int  @default(0)
+  notes            String?
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  service   Service?   @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  createdBy User?      @relation("EntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  documents Document[]
+
+  // At most one row per service per period.
+  @@unique([serviceId, periodYear, periodMonth])
+  @@index([periodYear, periodMonth])
+}
+
+// ---------------------------------------------------------------------------
+// An invoice/receipt attached to a payment row. Either an uploaded file
+// (stored on disk under ./uploads) OR an external link (e.g. Google Drive).
+// ---------------------------------------------------------------------------
+model Document {
   id           String   @id @default(cuid())
-  name         String
-  contactName  String?
-  contactEmail String
-  phone        String?
-  gstin        String? // GST identification number (India)
-  billingAddress String?
-  currency     String   @default("INR")
-  status       String   @default("ACTIVE") // ACTIVE | INACTIVE
-  notes        String?
+  entryId      String
+  kind         String   @default("FILE") // FILE | LINK
+  title        String
+  originalName String? // for FILE: the uploaded file name
+  storedName   String? // for FILE: the name on disk under ./uploads
+  mimeType     String?
+  sizeBytes    Int      @default(0)
+  externalUrl  String? // for LINK
+  uploadedById String?
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 
-  subscriptions Subscription[]
-  transactions  Transaction[]
-  invoices      Invoice[]
+  entry      PaymentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  uploadedBy User?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
 }
 
 // ---------------------------------------------------------------------------
-// Reusable pricing plans for subscriptions
-// ---------------------------------------------------------------------------
-model Plan {
-  id          String  @id @default(cuid())
-  name        String
-  description String?
-  amountPaise Int // price per cycle, stored in paise (1 INR = 100 paise)
-  interval    String  @default("MONTHLY") // MONTHLY | QUARTERLY | YEARLY
-  active      Boolean @default(true)
-  createdAt   DateTime @default(now())
-
-  subscriptions Subscription[]
-}
-
-// ---------------------------------------------------------------------------
-// A recurring commitment of an org to a plan
-// ---------------------------------------------------------------------------
-model Subscription {
-  id              String   @id @default(cuid())
-  organizationId  String
-  planId          String
-  status          String   @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
-  amountPaise     Int // may differ from plan (custom pricing)
-  interval        String   @default("MONTHLY")
-  startDate       DateTime @default(now())
-  nextBillingDate DateTime
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  plan         Plan          @relation(fields: [planId], references: [id])
-  transactions Transaction[]
-}
-
-// ---------------------------------------------------------------------------
-// The core money event — every charge is a Transaction
-// ---------------------------------------------------------------------------
-model Transaction {
-  id             String    @id @default(cuid())
-  organizationId String
-  type           String // SUBSCRIPTION | PAY_AS_YOU_GO | ONE_TIME
-  description    String
-  amountPaise    Int
-  currency       String    @default("INR")
-  // DRAFT -> PENDING_APPROVAL -> APPROVED -> INVOICED -> PAID
-  //                           \-> REJECTED     \-> OVERDUE
-  status         String    @default("DRAFT")
-  dueDate        DateTime?
-  subscriptionId String?
-  createdById    String
-  approvedById   String?
-  approvedAt     DateTime?
-  rejectedReason String?
-  paidAt         DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
-  createdBy    User          @relation("TransactionCreatedBy", fields: [createdById], references: [id])
-  approvedBy   User?         @relation("TransactionApprovedBy", fields: [approvedById], references: [id])
-  invoice      Invoice?
-}
-
-// ---------------------------------------------------------------------------
-// A billing document generated from an approved transaction
-// ---------------------------------------------------------------------------
-model Invoice {
-  id             String   @id @default(cuid())
-  number         String   @unique // e.g. ROQ-2026-0001
-  organizationId String
-  transactionId  String?  @unique
-  status         String   @default("DRAFT") // DRAFT | SENT | PARTIALLY_PAID | PAID | OVERDUE | VOID
-  issueDate      DateTime @default(now())
-  dueDate        DateTime
-  subtotalPaise  Int
-  taxRatePct     Float    @default(18) // GST default 18%
-  taxPaise       Int
-  totalPaise     Int
-  amountPaidPaise Int     @default(0)
-  notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  transaction  Transaction?      @relation(fields: [transactionId], references: [id])
-  lineItems    InvoiceLineItem[]
-  payments     Payment[]
-  emails       EmailOutbox[]
-}
-
-model InvoiceLineItem {
-  id             String @id @default(cuid())
-  invoiceId      String
-  description    String
-  quantity       Int    @default(1)
-  unitAmountPaise Int
-  amountPaise    Int
-
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-}
-
-// ---------------------------------------------------------------------------
-// A recorded payment against an invoice (manual entry — no gateway)
-// ---------------------------------------------------------------------------
-model Payment {
-  id          String   @id @default(cuid())
-  invoiceId   String
-  amountPaise Int
-  method      String   @default("BANK_TRANSFER") // BANK_TRANSFER | UPI | CARD | CASH | CHEQUE | OTHER
-  reference   String? // UTR / txn ref entered by staff
-  paidAt      DateTime @default(now())
-  recordedBy  String?
-  createdAt   DateTime @default(now())
-
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-}
-
-// ---------------------------------------------------------------------------
-// Simulated email queue — the alert engine writes here instead of sending
+// Simulated email queue — the alert engine writes here instead of sending.
+// Swap src/lib/email.ts for a real provider to go live.
 // ---------------------------------------------------------------------------
 model EmailOutbox {
   id           String    @id @default(cuid())
@@ -179,19 +131,17 @@ model EmailOutbox {
   toName       String?
   subject      String
   body         String
-  type         String // DUE_SOON | OVERDUE | INVOICE_SENT | APPROVAL_REQUEST | GENERIC
+  type         String // DUE_SOON | OVERDUE | GENERIC
   status       String    @default("QUEUED") // QUEUED | SENT | FAILED
-  invoiceId    String?
+  entryId      String?
   scheduledFor DateTime  @default(now())
   sentAt       DateTime?
   error        String?
   createdAt    DateTime  @default(now())
-
-  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 }
 
 // ---------------------------------------------------------------------------
-// Audit trail of who did what
+// Audit trail of who did what.
 // ---------------------------------------------------------------------------
 model AuditLog {
   id        String   @id @default(cuid())

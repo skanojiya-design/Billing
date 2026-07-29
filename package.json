@@ -2,7 +2,7 @@
   "name": "roqit-billing",
   "version": "0.1.0",
   "private": true,
-  "description": "roqit Billing & Transactions — one app for subscriptions, pay-as-you-go, one-time payments, invoices, approvals, and payment alerts.",
+  "description": "roqit Billing — internal recurring-payment tracker for vendors/services, with multi-currency amounts, monthly views, document storage, roles, and reminder alerts.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

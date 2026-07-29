@@ -17,6 +17,9 @@ next-env.d.ts
 prisma/*.db
 prisma/*.db-journal
 
+# uploaded documents (invoices/receipts)
+/uploads
+
 # env
 .env
 .env*.local

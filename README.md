@@ -1,17 +1,21 @@
-# roqit Billing
+# roqit Billing — recurring-payment tracker
 
-One internal app to run the whole money side of roqit — **without** an ops team.
+One internal app to track every **vendor/service ROQIT pays** each month —
+GitHub, AWS, Flespi, Twilio, Vercel, and the rest — replacing the
+`ROQIT_Recurring_Payment_Tracker` spreadsheet with something multiple office
+members can use safely, together.
 
-It tracks every kind of charge (subscriptions, pay-as-you-go, one-time), routes
-them through an approval step, turns approved charges into GST invoices, watches
-due dates, and automatically emails **"due soon"** and **"overdue"** reminders.
-Everything rolls up per **organization** and is viewable **month-on-month**.
+It records each payment (in **INR, USD and EUR**), tracks **due dates** and
+**status** (Pending / Paid / Overdue), keeps every **invoice/receipt** attached
+and searchable in one place, and automatically emails the team **"due soon"**
+and **"overdue"** reminders. Everything is organized **month-on-month**, just
+like the spreadsheet's monthly tabs.
 
-> This is a **record-keeping ledger**, not a payment gateway. No money moves
-> through the app. Your team records what happened elsewhere (invoice raised,
-> payment received, approval given) and the app keeps it all organized and
-> chases deadlines for you. Payments and email are **simulated** for now and are
-> designed to be swapped for Razorpay/Stripe + SendGrid/SES later.
+> This is a **record-keeping tracker**, not a payment gateway. No money moves
+> through the app. Your team records what happened elsewhere (invoice received,
+> payment made) and the app keeps it organized, chases deadlines, and stores the
+> documents. Email is **simulated** for now and is designed to be swapped for a
+> real provider later.
 
 ---
 
@@ -19,14 +23,20 @@ Everything rolls up per **organization** and is viewable **month-on-month**.
 
 | Area | What you can do |
 |------|-----------------|
-| **Dashboard** | MRR, collected this month, outstanding, overdue, pending approvals, a 6-month revenue chart, and one-click "run billing / run alerts". |
-| **Organizations** | Every account. Contact, GSTIN, address. Each org shows its subscriptions, transactions, invoices, total billed / collected / outstanding. |
-| **Transactions** | Record a `SUBSCRIPTION`, `PAY_AS_YOU_GO`, or `ONE_TIME` charge. Flows through `DRAFT → PENDING_APPROVAL → APPROVED → INVOICED → PAID` (or `REJECTED` / `OVERDUE`). |
-| **Approvals** | Approvers/Admins approve or reject pending transactions. |
-| **Invoices** | Auto-numbered (`ROQ-2026-0001`), GST tax, due date, printable document. Record (manual) payments; status updates automatically. |
-| **Subscriptions & Plans** | Reusable plans (monthly/quarterly/yearly). Subscribe an org; next-billing date is tracked. "Run billing" raises charges that are due. |
-| **Alerts & Email** | The engine flips past-due invoices to `OVERDUE`, emails a reminder N days before the due date, and chases overdue invoices. All emails land in a visible outbox. |
-| **Roles** | `ADMIN`, `APPROVER`, `VIEWER`. |
+| **Dashboard** | Billed / paid / outstanding this month, overdue count, a 6-month "paid" chart, and a "needs attention" list of upcoming & overdue payments. |
+| **Monthly Tracker** | The spreadsheet, reimagined: one row per service per month — Service, Type, Frequency, Due date, Paid-on, Status, **INR / USD / EUR** amounts, This-Month-Paid, Notes, and attached documents. Month tabs across the top and a totals row at the bottom. Mark paid, edit, or delete inline. |
+| **Services** | Define each recurring vendor once (type, frequency, currency, due day, default amounts). Then **"Generate month"** creates that month's rows automatically — no re-typing. |
+| **Documents** | Every invoice & receipt, **searchable and filterable** by service and month — the "easy way of knowing the documents". Upload a file or paste a Google Drive link. |
+| **Alerts & Email** | The engine flags overdue rows and emails the team a reminder N days before a due date and again when overdue. All emails land in a visible outbox. |
+| **Team** | Admins add office members and set their access. |
+
+## Access roles
+
+| Role | Can do |
+|------|--------|
+| **Admin** | Everything, plus manage team members. |
+| **Editor** | Add/edit payment rows, mark paid, upload documents, manage services. |
+| **Viewer** | Read-only — view everything and download documents, but can't change anything. |
 
 ## Tech
 
@@ -34,6 +44,7 @@ Everything rolls up per **organization** and is viewable **month-on-month**.
 - **Prisma + SQLite** — a local file database, zero setup (swap `DATABASE_URL` for Postgres later)
 - **Tailwind CSS**
 - Cookie-based session auth (`jose` + `bcryptjs`)
+- Uploaded documents are stored on disk under `./uploads`
 
 ## Getting started
 
@@ -44,21 +55,26 @@ npm run setup             # generate client + create DB + seed demo data
 npm run dev               # http://localhost:3000
 ```
 
+> On Windows PowerShell, use `copy .env.example .env` instead of `cp`.
+
 ### Demo logins (created by the seed)
 
 | Email | Password | Role |
 |-------|----------|------|
 | `admin@roqit.com` | `password123` | Admin |
-| `approver@roqit.com` | `password123` | Approver |
+| `editor@roqit.com` | `password123` | Editor |
 | `viewer@roqit.com` | `password123` | Viewer |
 
-## Running the alerts / billing automation
+The seed loads the real ROQIT services and three months of data (June paid,
+July current with an overdue AWS row, August upcoming) so every screen is
+populated on first run.
 
-The reminder engine can run on demand from the **Dashboard** or **Alerts** page,
-or headless on a schedule:
+## Running the reminder engine
+
+On demand from the **Alerts** page, or headless on a schedule:
 
 ```bash
-npm run alerts:run        # mark overdue, queue reminders, "send" the outbox
+npm run alerts:run        # flag overdue, queue reminders, "send" the outbox
 ```
 
 Or hit the HTTP endpoint from any external scheduler (cron, GitHub Action, Vercel Cron):
@@ -79,17 +95,17 @@ Tune how early reminders go out with `ALERT_DUE_SOON_DAYS` (default 5).
 | `npm run setup` | Generate Prisma client, create DB, seed |
 | `npm run db:reset` | Wipe & re-seed the database |
 | `npm run db:studio` | Open Prisma Studio to browse data |
-| `npm run alerts:run` | Run the alert/reminder engine once |
+| `npm run alerts:run` | Run the reminder engine once |
 
 ## Going live later (the swap-in points)
 
-Nothing in the app assumes simulation — two small files are the seams:
+Nothing in the app assumes simulation — the seams are small and clearly marked:
 
 1. **Email** — `src/lib/email.ts`, function `deliver()`. Replace the no-op with a
    real transport (SendGrid/SES/SMTP). Queueing and the outbox stay as-is.
-2. **Payments** — today payments are recorded manually. To accept real payments,
-   add a gateway (Razorpay/Stripe) and call `recordPayment` / `recomputeInvoiceStatus`
-   from its webhook instead of the form.
+2. **File storage** — `src/lib/storage.ts`. Swap the local-disk functions for
+   S3/GCS if you deploy to the cloud; the rest of the app only deals with the
+   stored name.
 3. **Database** — change the `provider` in `prisma/schema.prisma` to `postgresql`
    and point `DATABASE_URL` at Postgres. Enum-like values already live in
    `src/lib/constants.ts`.

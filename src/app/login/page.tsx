@@ -66,7 +66,7 @@ function LoginForm() {
         </form>
 
         <p className="mt-4 text-center text-xs text-gray-400">
-          Demo: admin@roqit.com · approver@roqit.com · viewer@roqit.com — password123
+          Demo: admin@roqit.com · editor@roqit.com · viewer@roqit.com — password123
         </p>
       </div>
     </div>

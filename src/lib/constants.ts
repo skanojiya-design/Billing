@@ -2,108 +2,85 @@
 // plain strings, keeping the allowed values + labels here is what keeps the app
 // consistent and makes a future move to Postgres enums painless.
 
-export const ROLES = ["ADMIN", "APPROVER", "VIEWER"] as const;
+// --- Access roles ----------------------------------------------------------
+export const ROLES = ["ADMIN", "EDITOR", "VIEWER"] as const;
 export type Role = (typeof ROLES)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   ADMIN: "Admin",
-  APPROVER: "Approver",
+  EDITOR: "Editor",
   VIEWER: "Viewer",
 };
+export const ROLE_HINTS: Record<Role, string> = {
+  ADMIN: "Full access + manage team members",
+  EDITOR: "Add/edit payments, mark paid, upload documents",
+  VIEWER: "Read-only — can view & download documents",
+};
 
-export const TRANSACTION_TYPES = ["SUBSCRIPTION", "PAY_AS_YOU_GO", "ONE_TIME"] as const;
-export type TransactionType = (typeof TRANSACTION_TYPES)[number];
-export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
+// --- Vendor / service type --------------------------------------------------
+export const VENDOR_TYPES = ["SUBSCRIPTION", "SERVICE"] as const;
+export type VendorType = (typeof VENDOR_TYPES)[number];
+export const VENDOR_TYPE_LABELS: Record<VendorType, string> = {
   SUBSCRIPTION: "Subscription",
+  SERVICE: "Service",
+};
+
+// --- Billing frequency ------------------------------------------------------
+export const BILLING_FREQUENCIES = [
+  "MONTHLY",
+  "ANNUAL",
+  "MONTHLY_USAGE",
+  "PAY_AS_YOU_GO",
+  "ONE_TIME",
+] as const;
+export type BillingFrequency = (typeof BILLING_FREQUENCIES)[number];
+export const BILLING_FREQUENCY_LABELS: Record<BillingFrequency, string> = {
+  MONTHLY: "Monthly",
+  ANNUAL: "Annual",
+  MONTHLY_USAGE: "Monthly (Usage)",
   PAY_AS_YOU_GO: "Pay as you go",
   ONE_TIME: "One-time",
 };
 
-export const TRANSACTION_STATUSES = [
-  "DRAFT",
-  "PENDING_APPROVAL",
-  "APPROVED",
-  "REJECTED",
-  "INVOICED",
-  "PAID",
-  "OVERDUE",
-  "CANCELLED",
-] as const;
-export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
-export const TRANSACTION_STATUS_LABELS: Record<TransactionStatus, string> = {
-  DRAFT: "Draft",
-  PENDING_APPROVAL: "Pending approval",
-  APPROVED: "Approved",
-  REJECTED: "Rejected",
-  INVOICED: "Invoiced",
+// --- Payment status ---------------------------------------------------------
+export const ENTRY_STATUSES = ["PENDING", "PAID", "OVERDUE"] as const;
+export type EntryStatus = (typeof ENTRY_STATUSES)[number];
+export const ENTRY_STATUS_LABELS: Record<EntryStatus, string> = {
+  PENDING: "Pending",
   PAID: "Paid",
   OVERDUE: "Overdue",
-  CANCELLED: "Cancelled",
 };
 
-export const INVOICE_STATUSES = [
-  "DRAFT",
-  "SENT",
-  "PARTIALLY_PAID",
-  "PAID",
-  "OVERDUE",
-  "VOID",
-] as const;
-export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
-export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
-  DRAFT: "Draft",
-  SENT: "Sent",
-  PARTIALLY_PAID: "Partially paid",
-  PAID: "Paid",
-  OVERDUE: "Overdue",
-  VOID: "Void",
+// --- Currencies -------------------------------------------------------------
+export const CURRENCIES = ["INR", "USD", "EUR"] as const;
+export type Currency = (typeof CURRENCIES)[number];
+export const CURRENCY_SYMBOLS: Record<Currency, string> = {
+  INR: "₹",
+  USD: "$",
+  EUR: "€",
 };
 
-export const SUBSCRIPTION_STATUSES = ["ACTIVE", "PAUSED", "CANCELLED"] as const;
-export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
-
-export const INTERVALS = ["MONTHLY", "QUARTERLY", "YEARLY"] as const;
-export type Interval = (typeof INTERVALS)[number];
-export const INTERVAL_LABELS: Record<Interval, string> = {
-  MONTHLY: "Monthly",
-  QUARTERLY: "Quarterly",
-  YEARLY: "Yearly",
-};
-export const INTERVAL_MONTHS: Record<Interval, number> = {
-  MONTHLY: 1,
-  QUARTERLY: 3,
-  YEARLY: 12,
-};
-
-export const PAYMENT_METHODS = ["BANK_TRANSFER", "UPI", "CARD", "CASH", "CHEQUE", "OTHER"] as const;
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
-export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
-  BANK_TRANSFER: "Bank transfer",
-  UPI: "UPI",
-  CARD: "Card",
-  CASH: "Cash",
-  CHEQUE: "Cheque",
-  OTHER: "Other",
-};
-
-export const EMAIL_TYPES = ["DUE_SOON", "OVERDUE", "INVOICE_SENT", "APPROVAL_REQUEST", "GENERIC"] as const;
+// --- Email alert types ------------------------------------------------------
+export const EMAIL_TYPES = ["DUE_SOON", "OVERDUE", "GENERIC"] as const;
 export type EmailType = (typeof EMAIL_TYPES)[number];
+
+// --- Month helpers ----------------------------------------------------------
+export const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+] as const;
+
+export function monthLabel(year: number, month: number): string {
+  return `${MONTH_NAMES[month - 1]} ${year}`;
+}
 
 // Tailwind classes for status badges, keyed by status value.
 export const STATUS_BADGE: Record<string, string> = {
-  DRAFT: "bg-gray-100 text-gray-700",
-  PENDING_APPROVAL: "bg-amber-100 text-amber-800",
-  APPROVED: "bg-blue-100 text-blue-800",
-  REJECTED: "bg-red-100 text-red-800",
-  INVOICED: "bg-indigo-100 text-indigo-800",
+  PENDING: "bg-amber-100 text-amber-800",
   PAID: "bg-green-100 text-green-800",
   OVERDUE: "bg-red-100 text-red-800",
-  CANCELLED: "bg-gray-100 text-gray-500",
-  SENT: "bg-blue-100 text-blue-800",
-  PARTIALLY_PAID: "bg-amber-100 text-amber-800",
-  VOID: "bg-gray-100 text-gray-500",
   ACTIVE: "bg-green-100 text-green-800",
-  PAUSED: "bg-amber-100 text-amber-800",
   INACTIVE: "bg-gray-100 text-gray-500",
   QUEUED: "bg-amber-100 text-amber-800",
+  SENT: "bg-green-100 text-green-800",
   FAILED: "bg-red-100 text-red-800",
 };

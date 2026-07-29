@@ -12,7 +12,7 @@ type QueueArgs = {
   subject: string;
   body: string;
   type: EmailType;
-  invoiceId?: string | null;
+  entryId?: string | null;
 };
 
 export async function queueEmail(args: QueueArgs) {
@@ -23,7 +23,7 @@ export async function queueEmail(args: QueueArgs) {
       subject: args.subject,
       body: args.body,
       type: args.type,
-      invoiceId: args.invoiceId ?? null,
+      entryId: args.entryId ?? null,
       status: "QUEUED",
     },
   });

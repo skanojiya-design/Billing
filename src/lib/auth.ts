@@ -77,10 +77,26 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   }
 }
 
-export function canApprove(role: Role): boolean {
-  return role === "ADMIN" || role === "APPROVER";
+/** Editors and admins can add/edit payment rows, mark paid, and upload docs. */
+export function canEdit(role: Role): boolean {
+  return role === "ADMIN" || role === "EDITOR";
 }
 
-export function canEdit(role: Role): boolean {
-  return role === "ADMIN" || role === "APPROVER";
+/** Only admins can manage team members and their roles. */
+export function canManageUsers(role: Role): boolean {
+  return role === "ADMIN";
+}
+
+/** Throw if the given role may not edit — used to guard server actions. */
+export function assertCanEdit(role: Role) {
+  if (!canEdit(role)) {
+    throw new Error("You don't have permission to make changes. Ask an admin for Editor access.");
+  }
+}
+
+/** Throw if the given role may not manage users. */
+export function assertCanManageUsers(role: Role) {
+  if (!canManageUsers(role)) {
+    throw new Error("Only admins can manage team members.");
+  }
 }
