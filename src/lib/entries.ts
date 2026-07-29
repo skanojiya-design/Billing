@@ -54,6 +54,67 @@ export async function generateEntriesForPeriod(
   return created;
 }
 
+/** The period immediately before the given one. */
+export function previousPeriod(year: number, month: number): { year: number; month: number } {
+  const dt = new Date(year, month - 2, 1); // month is 1-based; -2 gives previous month's index
+  return { year: dt.getFullYear(), month: dt.getMonth() + 1 };
+}
+
+/**
+ * Copy the previous month's rows into the given period. Amounts and notes carry
+ * over; status resets to PENDING, payment fields clear, and each due date rolls
+ * forward one month. Rows already present in the target period (same service)
+ * are skipped, so it's safe to run more than once. Returns rows created.
+ */
+export async function duplicatePreviousMonthEntries(
+  year: number,
+  month: number,
+  actorUserId?: string,
+): Promise<number> {
+  const prev = previousPeriod(year, month);
+  const source = await prisma.paymentEntry.findMany({
+    where: { periodYear: prev.year, periodMonth: prev.month },
+  });
+  if (source.length === 0) return 0;
+
+  const existing = await prisma.paymentEntry.findMany({
+    where: { periodYear: year, periodMonth: month },
+    select: { serviceId: true, serviceName: true },
+  });
+  const haveServiceId = new Set(existing.filter((e) => e.serviceId).map((e) => e.serviceId));
+  const haveName = new Set(existing.map((e) => e.serviceName.toLowerCase()));
+
+  let created = 0;
+  for (const s of source) {
+    // Skip if this service already has a row in the target month.
+    if (s.serviceId ? haveServiceId.has(s.serviceId) : haveName.has(s.serviceName.toLowerCase())) {
+      continue;
+    }
+    const rolledDue = s.dueDate ? dueDateFor(year, month, s.dueDate.getDate()) : null;
+    await prisma.paymentEntry.create({
+      data: {
+        serviceId: s.serviceId,
+        serviceName: s.serviceName,
+        vendorType: s.vendorType,
+        billingFrequency: s.billingFrequency,
+        periodYear: year,
+        periodMonth: month,
+        dueDate: rolledDue,
+        paymentMadeOn: null,
+        status: "PENDING",
+        amountInrPaise: s.amountInrPaise,
+        amountUsdCents: s.amountUsdCents,
+        amountEurCents: s.amountEurCents,
+        thisMonthPaidInrPaise: 0,
+        notes: s.notes,
+        createdById: actorUserId ?? null,
+      },
+    });
+    created++;
+  }
+  return created;
+}
+
 /** Sum the three currency columns + this-month-paid for a set of rows. */
 export function totalsFor(
   entries: {

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getSessionUser, canEdit } from "@/lib/auth";
 import { totalsFor, listPeriods } from "@/lib/entries";
-import { generateMonth } from "@/app/actions";
+import { generateMonth, duplicatePreviousMonth } from "@/app/actions";
+import { previousPeriod } from "@/lib/entries";
 import { formatMoneyCompact } from "@/lib/money";
 import {
   monthLabel,
@@ -55,6 +56,8 @@ export default async function TrackerPage({
 
   const prev = new Date(year, month - 2, 1);
   const next = new Date(year, month, 1);
+  const prevP = previousPeriod(year, month);
+  const prevLabel = `${MONTH_NAMES[prevP.month - 1].slice(0, 3)} ${prevP.year}`;
 
   return (
     <div>
@@ -63,7 +66,14 @@ export default async function TrackerPage({
         subtitle={monthLabel(year, month)}
         action={
           editable ? (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <form action={duplicatePreviousMonth}>
+                <input type="hidden" name="year" value={year} />
+                <input type="hidden" name="month" value={month} />
+                <button className="btn-secondary" title={`Copy every row from ${prevLabel} into this month (amounts & notes kept, status reset to pending)`}>
+                  Duplicate {prevLabel}
+                </button>
+              </form>
               <form action={generateMonth}>
                 <input type="hidden" name="year" value={year} />
                 <input type="hidden" name="month" value={month} />
@@ -112,11 +122,30 @@ export default async function TrackerPage({
       {entries.length === 0 ? (
         <div className="card p-10 text-center">
           <p className="text-sm font-medium text-gray-900">No rows for {monthLabel(year, month)} yet.</p>
-          <p className="mt-1 text-sm text-gray-500">
-            {editable
-              ? "Use “Generate month” to create rows from your active services, or “Add row” to add one manually."
-              : "Ask an editor to add this month's payments."}
-          </p>
+          {editable ? (
+            <>
+              <p className="mt-1 text-sm text-gray-500">
+                Start this month by copying last month, generating from your services, or adding rows by hand.
+              </p>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                <form action={duplicatePreviousMonth}>
+                  <input type="hidden" name="year" value={year} />
+                  <input type="hidden" name="month" value={month} />
+                  <button className="btn-primary" title={`Copy every row from ${prevLabel} into this month`}>
+                    Duplicate {prevLabel}
+                  </button>
+                </form>
+                <form action={generateMonth}>
+                  <input type="hidden" name="year" value={year} />
+                  <input type="hidden" name="month" value={month} />
+                  <button className="btn-secondary">Generate from services</button>
+                </form>
+                <Link href={`/tracker/new?y=${year}&m=${month}`} className="btn-secondary">Add row</Link>
+              </div>
+            </>
+          ) : (
+            <p className="mt-1 text-sm text-gray-500">Ask an editor to add this month's payments.</p>
+          )}
         </div>
       ) : (
         <div className="card overflow-x-auto">

@@ -12,7 +12,7 @@ import {
   hashPassword,
 } from "@/lib/auth";
 import { majorToMinor } from "@/lib/money";
-import { generateEntriesForPeriod, dueDateFor } from "@/lib/entries";
+import { generateEntriesForPeriod, duplicatePreviousMonthEntries } from "@/lib/entries";
 import { saveUpload, deleteUpload } from "@/lib/storage";
 import { runAlerts } from "@/lib/alerts";
 import { flushOutbox } from "@/lib/email";
@@ -200,6 +200,18 @@ export async function generateMonth(formData: FormData) {
   const month = Number(formData.get("month"));
   const created = await generateEntriesForPeriod(year, month, user?.id);
   if (user) await audit(user.id, "GENERATE_MONTH", "PaymentEntry", undefined, `${created} rows for ${month}/${year}`);
+  revalidatePath(trackerPath(year, month));
+  redirect(trackerPath(year, month));
+}
+
+/** Copy the previous month's rows into this period (status reset to pending). */
+export async function duplicatePreviousMonth(formData: FormData) {
+  await requireEditor();
+  const user = await getSessionUser();
+  const year = Number(formData.get("year"));
+  const month = Number(formData.get("month"));
+  const created = await duplicatePreviousMonthEntries(year, month, user?.id);
+  if (user) await audit(user.id, "DUPLICATE_MONTH", "PaymentEntry", undefined, `${created} rows into ${month}/${year}`);
   revalidatePath(trackerPath(year, month));
   redirect(trackerPath(year, month));
 }
