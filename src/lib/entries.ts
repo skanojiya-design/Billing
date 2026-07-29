@@ -2,6 +2,14 @@ import { prisma } from "./db";
 
 // Helpers for the monthly payment rows (PaymentEntry) — the heart of the tracker.
 
+/** Return the id only if a matching user exists, else null — keeps the
+ *  optional createdById foreign key valid even with a stale/unknown id. */
+async function safeCreatorId(id?: string | null): Promise<string | null> {
+  if (!id) return null;
+  const u = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+  return u ? id : null;
+}
+
 /** Build a due date inside a given period from a service's dueDayOfMonth. */
 export function dueDateFor(year: number, month: number, dueDay?: number | null): Date | null {
   if (!dueDay) return null;
@@ -22,6 +30,7 @@ export async function generateEntriesForPeriod(
   actorUserId?: string,
 ): Promise<number> {
   const services = await prisma.service.findMany({ where: { active: true } });
+  const creatorId = await safeCreatorId(actorUserId);
   let created = 0;
 
   for (const s of services) {
@@ -45,7 +54,7 @@ export async function generateEntriesForPeriod(
         amountInrPaise: s.defaultInrPaise,
         amountUsdCents: s.defaultUsdCents,
         amountEurCents: s.defaultEurCents,
-        createdById: actorUserId ?? null,
+        createdById: creatorId,
       },
     });
     created++;
@@ -83,6 +92,7 @@ export async function duplicatePreviousMonthEntries(
   });
   const haveServiceId = new Set(existing.filter((e) => e.serviceId).map((e) => e.serviceId));
   const haveName = new Set(existing.map((e) => e.serviceName.toLowerCase()));
+  const creatorId = await safeCreatorId(actorUserId);
 
   let created = 0;
   for (const s of source) {
@@ -107,7 +117,7 @@ export async function duplicatePreviousMonthEntries(
         amountEurCents: s.amountEurCents,
         thisMonthPaidInrPaise: 0,
         notes: s.notes,
-        createdById: actorUserId ?? null,
+        createdById: creatorId,
       },
     });
     created++;

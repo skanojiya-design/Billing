@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import {
   getSessionUser,
+  logout,
   canEdit,
   assertCanEdit,
   assertCanManageUsers,
@@ -18,9 +19,17 @@ import { runAlerts } from "@/lib/alerts";
 import { flushOutbox } from "@/lib/email";
 
 async function requireUser() {
-  const user = await getSessionUser();
-  if (!user) redirect("/login");
-  return user;
+  const session = await getSessionUser();
+  if (!session) redirect("/login");
+  // The session lives in a signed cookie. Make sure the user still exists and is
+  // active — after the DB is re-seeded, IDs regenerate and an old cookie would
+  // point at a deleted user, which breaks foreign-key writes. Force a re-login.
+  const dbUser = await prisma.user.findUnique({ where: { id: session.id }, select: { active: true } });
+  if (!dbUser || !dbUser.active) {
+    logout();
+    redirect("/login");
+  }
+  return session;
 }
 
 async function requireEditor() {
