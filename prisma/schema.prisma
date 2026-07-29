@@ -1,0 +1,206 @@
+// roqit Billing — data model
+// NOTE: enum-like fields are stored as plain strings because SQLite (the default
+// dev database) does not support native enums. The allowed values live in
+// src/lib/constants.ts so switching to Postgres later is trivial.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Staff who log in to operate the system
+// ---------------------------------------------------------------------------
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("VIEWER") // ADMIN | APPROVER | VIEWER
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  createdTransactions  Transaction[] @relation("TransactionCreatedBy")
+  approvedTransactions Transaction[] @relation("TransactionApprovedBy")
+  auditLogs            AuditLog[]
+}
+
+// ---------------------------------------------------------------------------
+// The account everything rolls up to
+// ---------------------------------------------------------------------------
+model Organization {
+  id           String   @id @default(cuid())
+  name         String
+  contactName  String?
+  contactEmail String
+  phone        String?
+  gstin        String? // GST identification number (India)
+  billingAddress String?
+  currency     String   @default("INR")
+  status       String   @default("ACTIVE") // ACTIVE | INACTIVE
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subscriptions Subscription[]
+  transactions  Transaction[]
+  invoices      Invoice[]
+}
+
+// ---------------------------------------------------------------------------
+// Reusable pricing plans for subscriptions
+// ---------------------------------------------------------------------------
+model Plan {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  amountPaise Int // price per cycle, stored in paise (1 INR = 100 paise)
+  interval    String  @default("MONTHLY") // MONTHLY | QUARTERLY | YEARLY
+  active      Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  subscriptions Subscription[]
+}
+
+// ---------------------------------------------------------------------------
+// A recurring commitment of an org to a plan
+// ---------------------------------------------------------------------------
+model Subscription {
+  id              String   @id @default(cuid())
+  organizationId  String
+  planId          String
+  status          String   @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
+  amountPaise     Int // may differ from plan (custom pricing)
+  interval        String   @default("MONTHLY")
+  startDate       DateTime @default(now())
+  nextBillingDate DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         Plan          @relation(fields: [planId], references: [id])
+  transactions Transaction[]
+}
+
+// ---------------------------------------------------------------------------
+// The core money event — every charge is a Transaction
+// ---------------------------------------------------------------------------
+model Transaction {
+  id             String    @id @default(cuid())
+  organizationId String
+  type           String // SUBSCRIPTION | PAY_AS_YOU_GO | ONE_TIME
+  description    String
+  amountPaise    Int
+  currency       String    @default("INR")
+  // DRAFT -> PENDING_APPROVAL -> APPROVED -> INVOICED -> PAID
+  //                           \-> REJECTED     \-> OVERDUE
+  status         String    @default("DRAFT")
+  dueDate        DateTime?
+  subscriptionId String?
+  createdById    String
+  approvedById   String?
+  approvedAt     DateTime?
+  rejectedReason String?
+  paidAt         DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  createdBy    User          @relation("TransactionCreatedBy", fields: [createdById], references: [id])
+  approvedBy   User?         @relation("TransactionApprovedBy", fields: [approvedById], references: [id])
+  invoice      Invoice?
+}
+
+// ---------------------------------------------------------------------------
+// A billing document generated from an approved transaction
+// ---------------------------------------------------------------------------
+model Invoice {
+  id             String   @id @default(cuid())
+  number         String   @unique // e.g. ROQ-2026-0001
+  organizationId String
+  transactionId  String?  @unique
+  status         String   @default("DRAFT") // DRAFT | SENT | PARTIALLY_PAID | PAID | OVERDUE | VOID
+  issueDate      DateTime @default(now())
+  dueDate        DateTime
+  subtotalPaise  Int
+  taxRatePct     Float    @default(18) // GST default 18%
+  taxPaise       Int
+  totalPaise     Int
+  amountPaidPaise Int     @default(0)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transaction  Transaction?      @relation(fields: [transactionId], references: [id])
+  lineItems    InvoiceLineItem[]
+  payments     Payment[]
+  emails       EmailOutbox[]
+}
+
+model InvoiceLineItem {
+  id             String @id @default(cuid())
+  invoiceId      String
+  description    String
+  quantity       Int    @default(1)
+  unitAmountPaise Int
+  amountPaise    Int
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// A recorded payment against an invoice (manual entry — no gateway)
+// ---------------------------------------------------------------------------
+model Payment {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  amountPaise Int
+  method      String   @default("BANK_TRANSFER") // BANK_TRANSFER | UPI | CARD | CASH | CHEQUE | OTHER
+  reference   String? // UTR / txn ref entered by staff
+  paidAt      DateTime @default(now())
+  recordedBy  String?
+  createdAt   DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Simulated email queue — the alert engine writes here instead of sending
+// ---------------------------------------------------------------------------
+model EmailOutbox {
+  id           String    @id @default(cuid())
+  toEmail      String
+  toName       String?
+  subject      String
+  body         String
+  type         String // DUE_SOON | OVERDUE | INVOICE_SENT | APPROVAL_REQUEST | GENERIC
+  status       String    @default("QUEUED") // QUEUED | SENT | FAILED
+  invoiceId    String?
+  scheduledFor DateTime  @default(now())
+  sentAt       DateTime?
+  error        String?
+  createdAt    DateTime  @default(now())
+
+  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+}
+
+// ---------------------------------------------------------------------------
+// Audit trail of who did what
+// ---------------------------------------------------------------------------
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String?
+  detail    String?
+  createdAt DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+}
