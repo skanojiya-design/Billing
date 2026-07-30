@@ -65,27 +65,36 @@ export default async function TrackerPage({
         title="Monthly Tracker"
         subtitle={monthLabel(year, month)}
         action={
-          editable ? (
-            <div className="flex flex-wrap gap-2">
-              <form action={duplicatePreviousMonth}>
-                <input type="hidden" name="year" value={year} />
-                <input type="hidden" name="month" value={month} />
-                <button className="btn-secondary" title={`Copy every row from ${prevLabel} into this month (amounts & notes kept, status reset to pending)`}>
-                  Duplicate {prevLabel}
-                </button>
-              </form>
-              <form action={generateMonth}>
-                <input type="hidden" name="year" value={year} />
-                <input type="hidden" name="month" value={month} />
-                <button className="btn-secondary" title="Create rows for every active service that doesn't have one yet">
-                  Generate month
-                </button>
-              </form>
-              <Link href={`/tracker/new?y=${year}&m=${month}`} className="btn-primary">
-                Add row
-              </Link>
-            </div>
-          ) : null
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={`/api/export/tracker?y=${year}&m=${month}`}
+              className="btn-secondary"
+              title={`Download ${monthLabel(year, month)} as an Excel file`}
+            >
+              ⬇ Export Excel
+            </a>
+            {editable && (
+              <>
+                <form action={duplicatePreviousMonth}>
+                  <input type="hidden" name="year" value={year} />
+                  <input type="hidden" name="month" value={month} />
+                  <button className="btn-secondary" title={`Copy every row from ${prevLabel} into this month (amounts & notes kept, status reset to pending)`}>
+                    Duplicate {prevLabel}
+                  </button>
+                </form>
+                <form action={generateMonth}>
+                  <input type="hidden" name="year" value={year} />
+                  <input type="hidden" name="month" value={month} />
+                  <button className="btn-secondary" title="Create rows for every active service that doesn't have one yet">
+                    Generate month
+                  </button>
+                </form>
+                <Link href={`/tracker/new?y=${year}&m=${month}`} className="btn-primary">
+                  Add row
+                </Link>
+              </>
+            )}
+          </div>
         }
       />
 
