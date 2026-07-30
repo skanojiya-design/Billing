@@ -113,15 +113,29 @@ model Document {
   kind         String   @default("FILE") // FILE | LINK
   title        String
   originalName String? // for FILE: the uploaded file name
-  storedName   String? // for FILE: the name on disk under ./uploads
+  storedName   String? // legacy: former on-disk name (files now live in DocumentBlob)
   mimeType     String?
   sizeBytes    Int      @default(0)
   externalUrl  String? // for LINK
   uploadedById String?
   createdAt    DateTime @default(now())
 
-  entry      PaymentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  uploadedBy User?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  entry      PaymentEntry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  uploadedBy User?         @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  blob       DocumentBlob?
+}
+
+// The raw bytes of an uploaded file, stored in Postgres (bytea). Kept in a
+// separate table so listing documents never pulls the file contents into
+// memory — only the download route reads it. Storing files in the database
+// means uploads persist on serverless hosts (Vercel) and are shared by everyone.
+model DocumentBlob {
+  id         String   @id @default(cuid())
+  documentId String   @unique
+  data       Bytes
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 }
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,6 @@ import {
 } from "@/lib/auth";
 import { majorToMinor } from "@/lib/money";
 import { generateEntriesForPeriod, duplicatePreviousMonthEntries } from "@/lib/entries";
-import { saveUpload, deleteUpload } from "@/lib/storage";
 import { runAlerts } from "@/lib/alerts";
 import { flushOutbox } from "@/lib/email";
 
@@ -252,18 +251,22 @@ export async function addDocument(formData: FormData) {
   } else {
     const file = formData.get("file") as File | null;
     if (!file || file.size === 0) throw new Error("Please choose a file to upload.");
+    // ~10 MB guard — invoices/receipts are far smaller, and we store the bytes
+    // in Postgres so we keep individual files modest.
+    const MAX = 10 * 1024 * 1024;
+    if (file.size > MAX) throw new Error("File is too large (max 10 MB).");
     const bytes = Buffer.from(await file.arrayBuffer());
-    const storedName = await saveUpload(file.name, bytes);
+    // Store the file contents directly in the database (DocumentBlob).
     await prisma.document.create({
       data: {
         entryId,
         kind: "FILE",
         title: title || file.name,
         originalName: file.name,
-        storedName,
         mimeType: file.type || "application/octet-stream",
         sizeBytes: file.size,
         uploadedById: user.id,
+        blob: { create: { data: bytes } },
       },
     });
   }
@@ -277,7 +280,7 @@ export async function deleteDocument(id: string) {
   const user = await requireEditor();
   const doc = await prisma.document.findUnique({ where: { id }, include: { entry: true } });
   if (!doc) return;
-  if (doc.kind === "FILE" && doc.storedName) await deleteUpload(doc.storedName);
+  // The DocumentBlob (file bytes) is removed automatically via onDelete: Cascade.
   await prisma.document.delete({ where: { id } });
   await audit(user.id, "DELETE_DOCUMENT", "Document", id, doc.title);
   if (doc.entry) revalidatePath(trackerPath(doc.entry.periodYear, doc.entry.periodMonth));

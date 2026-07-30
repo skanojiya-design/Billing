@@ -44,7 +44,7 @@ like the spreadsheet's monthly tabs.
 - **Prisma + PostgreSQL** — use a free managed Postgres (Neon/Supabase); one shared database for the whole team
 - **Tailwind CSS**
 - Cookie-based session auth (`jose` + `bcryptjs`)
-- Documents: **Google Drive links** (recommended) or file uploads stored under `./uploads`
+- Documents: upload files (stored in Postgres, so they persist on serverless hosts) or paste external links
 
 ## Getting started
 
@@ -109,7 +109,7 @@ Nothing in the app assumes simulation — the seams are small and clearly marked
 
 1. **Email** — `src/lib/email.ts`, function `deliver()`. Replace the no-op with a
    real transport (SendGrid/SES/SMTP). Queueing and the outbox stay as-is.
-2. **File storage** — `src/lib/storage.ts`. On a serverless host the local disk is
-   temporary, so use **Drive links** for documents there, or swap these functions
-   for S3/GCS/Supabase Storage; the rest of the app only deals with the stored name.
+2. **File storage** — uploaded files are stored in Postgres (`DocumentBlob`), which
+   persists on serverless hosts and needs no extra service. For very large files or
+   high volume, switch the upload/download paths to S3/GCS/Supabase Storage.
 3. **Deployment** — see [DEPLOYMENT.md](./DEPLOYMENT.md) for Neon (Postgres) + Vercel.

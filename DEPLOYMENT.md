@@ -77,15 +77,16 @@ Log in as `admin@roqit.com` (password `password123`), go to **Team**, and:
 
 ## Documents
 
-In the deployed version, attach invoices/receipts as **Google Drive links**
-(the "Paste a link" option on any payment row) pointing at your existing
-`ROQIT - SharedFolder`. Everyone with Drive access can open them, and there's
-nothing extra to host.
+Each payment row supports two ways to attach an invoice/receipt:
 
-> The "Upload file" option stores files on the server's local disk. That works
-> on your laptop, but Vercel's disk is **temporary** — uploaded files disappear
-> on the next deploy. So on the hosted site, prefer **links**. (If you later want
-> real in-app uploads, we can wire up Supabase Storage or S3 — ask me.)
+- **Upload a file** — the file is stored **inside the Postgres database**, so it
+  persists across deploys and is shared by everyone (works the same on a laptop
+  and on Vercel). Keep individual files modest (max 10 MB); the free Neon tier's
+  0.5 GB holds thousands of typical invoices.
+- **Paste a link** — e.g. a Google Drive link into your existing
+  `ROQIT - SharedFolder`. Nothing is stored in the app; only the URL.
+
+Use whichever suits each row.
 
 ## Reminders (optional)
 
