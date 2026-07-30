@@ -5,19 +5,22 @@
 // Twilio, …) — exactly like the "ROQIT_Recurring_Payment_Tracker" spreadsheet,
 // but multi-user, with roles, and a searchable document library.
 //
-// NOTE: enum-like fields are stored as plain strings because SQLite (the default
-// dev database) has no native enums. The allowed values live in
-// src/lib/constants.ts, so switching to Postgres enums later is trivial.
+// NOTE: enum-like fields are stored as plain strings (allowed values live in
+// src/lib/constants.ts). This keeps the model portable and easy to evolve; it
+// can be tightened to native Postgres enums later if desired.
 //
 // Money is stored as integer minor units (paise for INR, cents for USD/EUR) to
 // avoid floating-point rounding. See src/lib/money.ts.
+//
+// Database: PostgreSQL. Set DATABASE_URL to your managed Postgres connection
+// string (Neon/Supabase). For local dev you can point it at the same database.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

@@ -41,21 +41,27 @@ like the spreadsheet's monthly tabs.
 ## Tech
 
 - **Next.js 14** (App Router, TypeScript) — one app, frontend + backend together
-- **Prisma + SQLite** — a local file database, zero setup (swap `DATABASE_URL` for Postgres later)
+- **Prisma + PostgreSQL** — use a free managed Postgres (Neon/Supabase); one shared database for the whole team
 - **Tailwind CSS**
 - Cookie-based session auth (`jose` + `bcryptjs`)
-- Uploaded documents are stored on disk under `./uploads`
+- Documents: **Google Drive links** (recommended) or file uploads stored under `./uploads`
 
 ## Getting started
 
+You need a PostgreSQL database. The easiest is a free **Neon** (https://neon.tech)
+or **Supabase** project — create one and copy its connection string.
+
 ```bash
 npm install
-cp .env.example .env      # then edit AUTH_SECRET
-npm run setup             # generate client + create DB + seed demo data
+cp .env.example .env      # then set DATABASE_URL (Postgres) and AUTH_SECRET
+npm run setup             # generate client + create tables + seed demo data
 npm run dev               # http://localhost:3000
 ```
 
 > On Windows PowerShell, use `copy .env.example .env` instead of `cp`.
+>
+> **To put it online for the whole office, see [DEPLOYMENT.md](./DEPLOYMENT.md)** —
+> a step-by-step Neon + Vercel guide.
 
 ### Demo logins (created by the seed)
 
@@ -103,9 +109,7 @@ Nothing in the app assumes simulation — the seams are small and clearly marked
 
 1. **Email** — `src/lib/email.ts`, function `deliver()`. Replace the no-op with a
    real transport (SendGrid/SES/SMTP). Queueing and the outbox stay as-is.
-2. **File storage** — `src/lib/storage.ts`. Swap the local-disk functions for
-   S3/GCS if you deploy to the cloud; the rest of the app only deals with the
-   stored name.
-3. **Database** — change the `provider` in `prisma/schema.prisma` to `postgresql`
-   and point `DATABASE_URL` at Postgres. Enum-like values already live in
-   `src/lib/constants.ts`.
+2. **File storage** — `src/lib/storage.ts`. On a serverless host the local disk is
+   temporary, so use **Drive links** for documents there, or swap these functions
+   for S3/GCS/Supabase Storage; the rest of the app only deals with the stored name.
+3. **Deployment** — see [DEPLOYMENT.md](./DEPLOYMENT.md) for Neon (Postgres) + Vercel.
