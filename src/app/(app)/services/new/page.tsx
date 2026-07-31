@@ -10,7 +10,7 @@ export default async function NewServicePage() {
   if (!user || !canEdit(user.role)) redirect("/services");
 
   return (
-    <div>
+    <div className="max-w-3xl">
       <PageHeader title="New service" subtitle="Add a recurring vendor to track" />
       <ServiceForm />
     </div>

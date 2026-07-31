@@ -14,7 +14,7 @@ export default async function EditServicePage({ params }: { params: { id: string
   if (!service) notFound();
 
   return (
-    <div>
+    <div className="max-w-3xl">
       <PageHeader title={`Edit ${service.name}`} subtitle="Recurring service settings" />
       <ServiceForm service={service} />
     </div>
