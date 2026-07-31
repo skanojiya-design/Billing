@@ -10,7 +10,7 @@ export default async function NewUserPage() {
   if (!me || !canManageUsers(me.role)) redirect("/");
 
   return (
-    <div>
+    <div className="max-w-3xl">
       <PageHeader title="Add team member" subtitle="Create a login for an office member" />
       <UserForm />
     </div>

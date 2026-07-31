@@ -32,7 +32,7 @@ export default async function NewEntryPage({
   }));
 
   return (
-    <div>
+    <div className="max-w-3xl">
       <PageHeader title="Add payment row" subtitle={monthLabel(year, month)} />
       <EntryForm year={year} month={month} services={options} />
     </div>

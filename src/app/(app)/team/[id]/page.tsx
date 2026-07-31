@@ -14,7 +14,7 @@ export default async function EditUserPage({ params }: { params: { id: string } 
   if (!user) notFound();
 
   return (
-    <div>
+    <div className="max-w-3xl">
       <PageHeader title={`Edit ${user.name}`} subtitle="Update role or reset password" />
       <UserForm user={user} />
     </div>
