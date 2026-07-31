@@ -1,13 +1,33 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { addDocument, deleteDocument } from "@/app/actions";
 
 export function DocumentForm({ entryId }: { entryId: string }) {
   const [kind, setKind] = useState<"FILE" | "LINK">("FILE");
+  const [error, setError] = useState("");
+  const [pending, start] = useTransition();
+  const router = useRouter();
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError("");
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    start(async () => {
+      const res = await addDocument(fd);
+      if (res?.error) {
+        setError(res.error);
+      } else {
+        form.reset();
+        router.refresh();
+      }
+    });
+  }
 
   return (
-    <form action={addDocument} className="space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+    <form onSubmit={onSubmit} className="space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
       <input type="hidden" name="entryId" value={entryId} />
       <input type="hidden" name="kind" value={kind} />
 
@@ -45,7 +65,13 @@ export function DocumentForm({ entryId }: { entryId: string }) {
         </div>
       )}
 
-      <button className="btn-primary" type="submit">Attach document</button>
+      {error && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      )}
+
+      <button className="btn-primary" type="submit" disabled={pending}>
+        {pending ? "Attaching…" : "Attach document"}
+      </button>
     </form>
   );
 }

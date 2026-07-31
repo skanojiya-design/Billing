@@ -227,53 +227,51 @@ export async function duplicatePreviousMonth(formData: FormData) {
 // --------------------------------------------------------------------------
 // Documents (invoices / receipts)
 // --------------------------------------------------------------------------
-export async function addDocument(formData: FormData) {
-  const user = await requireEditor();
-  const entryId = String(formData.get("entryId") || "");
-  const entry = await prisma.paymentEntry.findUnique({ where: { id: entryId } });
-  if (!entry) throw new Error("Row not found");
+// Returns a result object (rather than throwing) so the form can show a clear
+// message instead of Next's opaque server-side-exception page.
+export async function addDocument(formData: FormData): Promise<{ ok?: true; error?: string }> {
+  const user = await requireEditor(); // may redirect if logged out — fine, outside try
+  try {
+    const entryId = String(formData.get("entryId") || "");
+    const entry = await prisma.paymentEntry.findUnique({ where: { id: entryId } });
+    if (!entry) return { error: "Payment row not found." };
 
-  const kind = String(formData.get("kind") || "FILE");
-  const title = String(formData.get("title") || "").trim();
+    const kind = String(formData.get("kind") || "FILE");
+    const title = String(formData.get("title") || "").trim();
 
-  if (kind === "LINK") {
-    const url = String(formData.get("externalUrl") || "").trim();
-    if (!url) throw new Error("Please provide a link.");
-    await prisma.document.create({
-      data: {
-        entryId,
-        kind: "LINK",
-        title: title || url,
-        externalUrl: url,
-        uploadedById: user.id,
-      },
-    });
-  } else {
-    const file = formData.get("file") as File | null;
-    if (!file || file.size === 0) throw new Error("Please choose a file to upload.");
-    // ~10 MB guard — invoices/receipts are far smaller, and we store the bytes
-    // in Postgres so we keep individual files modest.
-    const MAX = 10 * 1024 * 1024;
-    if (file.size > MAX) throw new Error("File is too large (max 10 MB).");
-    const bytes = Buffer.from(await file.arrayBuffer());
-    // Store the file contents directly in the database (DocumentBlob).
-    await prisma.document.create({
-      data: {
-        entryId,
-        kind: "FILE",
-        title: title || file.name,
-        originalName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        sizeBytes: file.size,
-        uploadedById: user.id,
-        blob: { create: { data: bytes } },
-      },
-    });
+    if (kind === "LINK") {
+      const url = String(formData.get("externalUrl") || "").trim();
+      if (!url) return { error: "Please provide a link." };
+      await prisma.document.create({
+        data: { entryId, kind: "LINK", title: title || url, externalUrl: url, uploadedById: user.id },
+      });
+    } else {
+      const file = formData.get("file") as File | null;
+      if (!file || file.size === 0) return { error: "Please choose a file to upload." };
+      const MAX = 10 * 1024 * 1024;
+      if (file.size > MAX) return { error: "File is too large (max 10 MB)." };
+      const bytes = Buffer.from(await file.arrayBuffer());
+      await prisma.document.create({
+        data: {
+          entryId,
+          kind: "FILE",
+          title: title || file.name,
+          originalName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          sizeBytes: file.size,
+          uploadedById: user.id,
+          blob: { create: { data: bytes } },
+        },
+      });
+    }
+    await audit(user.id, "ADD_DOCUMENT", "PaymentEntry", entryId, title);
+    revalidatePath(trackerPath(entry.periodYear, entry.periodMonth));
+    revalidatePath("/documents");
+    return { ok: true };
+  } catch (e) {
+    console.error("addDocument failed:", e);
+    return { error: e instanceof Error ? e.message : "Upload failed. Please try again." };
   }
-  await audit(user.id, "ADD_DOCUMENT", "PaymentEntry", entryId, title);
-  revalidatePath(trackerPath(entry.periodYear, entry.periodMonth));
-  revalidatePath("/documents");
-  redirect(trackerPath(entry.periodYear, entry.periodMonth));
 }
 
 export async function deleteDocument(id: string) {
