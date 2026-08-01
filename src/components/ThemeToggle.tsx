@@ -27,11 +27,12 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-fg"
+      title={dark ? "Light mode" : "Dark mode"}
+      className="sidebar-compact flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-fg"
       aria-label="Toggle dark mode"
     >
       <Icon name={dark ? "sun" : "moon"} className="h-[18px] w-[18px] shrink-0" />
-      {dark ? "Light mode" : "Dark mode"}
+      <span className="sidebar-label">{dark ? "Light mode" : "Dark mode"}</span>
     </button>
   );
 }
