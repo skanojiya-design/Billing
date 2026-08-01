@@ -5,29 +5,30 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ROLE_LABELS, type Role } from "@/lib/constants";
 import { BrandLogo } from "@/components/BrandLogo";
+import { Icon } from "@/components/Icon";
 
 type NavItem = { href: string; label: string; icon: string; adminOnly?: boolean };
 const SECTIONS: { heading?: string; items: NavItem[] }[] = [
   {
     items: [
-      { href: "/", label: "Dashboard", icon: "📊" },
-      { href: "/tracker", label: "Monthly Tracker", icon: "🗓️" },
-      { href: "/services", label: "Services", icon: "🔁" },
-      { href: "/documents", label: "Documents", icon: "📁" },
-      { href: "/alerts", label: "Alerts & Email", icon: "🔔" },
+      { href: "/", label: "Dashboard", icon: "bar-chart-2" },
+      { href: "/tracker", label: "Monthly Tracker", icon: "calendar" },
+      { href: "/services", label: "Services", icon: "repeat" },
+      { href: "/documents", label: "Documents", icon: "folder" },
+      { href: "/alerts", label: "Alerts & Email", icon: "bell" },
     ],
   },
   {
     heading: "Assets",
     items: [
-      { href: "/assets", label: "Assets overview", icon: "📦" },
-      { href: "/suppliers", label: "Suppliers", icon: "🏭" },
-      { href: "/purchases", label: "Purchases", icon: "🧾" },
-      { href: "/devices", label: "Devices", icon: "📟" },
+      { href: "/assets", label: "Assets overview", icon: "package" },
+      { href: "/suppliers", label: "Suppliers", icon: "truck" },
+      { href: "/purchases", label: "Purchases", icon: "shopping-cart" },
+      { href: "/devices", label: "Devices", icon: "cpu" },
     ],
   },
   {
-    items: [{ href: "/team", label: "Team", icon: "👥", adminOnly: true }],
+    items: [{ href: "/team", label: "Team", icon: "users", adminOnly: true }],
   },
 ];
 
@@ -71,7 +72,7 @@ export function Sidebar({ user }: { user: { name: string; email: string; role: R
                   active ? "bg-brand-50 text-brand-700" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                 }`}
               >
-                <span className="text-base">{item.icon}</span>
+                <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
                 {item.label}
               </Link>
             );
