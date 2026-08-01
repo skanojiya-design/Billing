@@ -28,13 +28,13 @@ export default async function PurchasesPage() {
 
       {purchases.length === 0 ? (
         <div className="card p-10 text-center">
-          <p className="text-sm font-medium text-gray-900">No purchases yet.</p>
-          {editable && <p className="mt-1 text-sm text-gray-500">Record your first device procurement.</p>}
+          <p className="text-sm font-medium text-fg">No purchases yet.</p>
+          {editable && <p className="mt-1 text-sm text-muted">Record your first device procurement.</p>}
         </div>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-surface-2">
               <tr>
                 <th className="th">Date</th>
                 <th className="th">Reference</th>
@@ -45,9 +45,9 @@ export default async function PurchasesPage() {
                 <th className="th text-right">Docs</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {purchases.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-50">
+                <tr key={p.id} className="hover:bg-surface-2">
                   <td className="td whitespace-nowrap">
                     <Link href={`/purchases/${p.id}`} className="font-medium text-brand-600 hover:underline">
                       {format(p.purchaseDate, "d MMM yyyy")}

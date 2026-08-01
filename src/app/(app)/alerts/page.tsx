@@ -28,12 +28,12 @@ export default async function AlertsPage() {
       <div className="card mb-6 p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-fg">
               The alert engine flags <strong>overdue</strong> rows, and emails the team a reminder{" "}
               <strong>{dueSoonDays} days before</strong> a due date and again when a payment is overdue.{" "}
               {queued > 0 ? `${queued} message(s) waiting to send.` : "Outbox is clear."}
             </p>
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-faint">
               Emails are simulated (listed below). Run on a schedule via <code>npm run alerts:run</code>, or here.
               Reminders go to all active Admins &amp; Editors.
             </p>
@@ -51,8 +51,8 @@ export default async function AlertsPage() {
         <EmptyState title="No emails yet" hint="Run the alert engine to populate the outbox." />
       ) : (
         <div className="card overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-surface-2">
               <tr>
                 <th className="th">When</th>
                 <th className="th">Type</th>
@@ -61,14 +61,14 @@ export default async function AlertsPage() {
                 <th className="th">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {emails.map((e) => (
-                <tr key={e.id} className="hover:bg-gray-50">
-                  <td className="td whitespace-nowrap text-gray-500">{format(e.createdAt, "d MMM, HH:mm")}</td>
+                <tr key={e.id} className="hover:bg-surface-2">
+                  <td className="td whitespace-nowrap text-muted">{format(e.createdAt, "d MMM, HH:mm")}</td>
                   <td className="td">{TYPE_LABEL[e.type] ?? e.type}</td>
                   <td className="td">
                     {e.toName ?? e.toEmail}
-                    <span className="block text-xs text-gray-400">{e.toEmail}</span>
+                    <span className="block text-xs text-faint">{e.toEmail}</span>
                   </td>
                   <td className="td max-w-md truncate" title={e.subject}>{e.subject}</td>
                   <td className="td"><StatusBadge status={e.status} /></td>

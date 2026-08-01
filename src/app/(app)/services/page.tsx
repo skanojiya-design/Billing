@@ -29,13 +29,13 @@ export default async function ServicesPage() {
 
       {services.length === 0 ? (
         <div className="card p-10 text-center">
-          <p className="text-sm font-medium text-gray-900">No services yet.</p>
-          {editable && <p className="mt-1 text-sm text-gray-500">Add GitHub, AWS, etc. to start generating monthly rows.</p>}
+          <p className="text-sm font-medium text-fg">No services yet.</p>
+          {editable && <p className="mt-1 text-sm text-muted">Add GitHub, AWS, etc. to start generating monthly rows.</p>}
         </div>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-surface-2">
               <tr>
                 <th className="th">Service</th>
                 <th className="th">Type</th>
@@ -47,15 +47,15 @@ export default async function ServicesPage() {
                 {editable && <th className="th text-right">Actions</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {services.map((s) => {
                 const defMinor =
                   s.currency === "INR" ? s.defaultInrPaise : s.currency === "USD" ? s.defaultUsdCents : s.defaultEurCents;
                 return (
-                  <tr key={s.id} className="hover:bg-gray-50">
-                    <td className="td font-medium text-gray-900">
+                  <tr key={s.id} className="hover:bg-surface-2">
+                    <td className="td font-medium text-fg">
                       {s.name}
-                      {s.notes && <p className="text-xs font-normal text-gray-400 line-clamp-1">{s.notes}</p>}
+                      {s.notes && <p className="text-xs font-normal text-faint line-clamp-1">{s.notes}</p>}
                     </td>
                     <td className="td">{VENDOR_TYPE_LABELS[s.vendorType as VendorType] ?? s.vendorType}</td>
                     <td className="td">{BILLING_FREQUENCY_LABELS[s.billingFrequency as BillingFrequency] ?? s.billingFrequency}</td>
@@ -66,7 +66,7 @@ export default async function ServicesPage() {
                     {editable && (
                       <td className="td">
                         <div className="flex items-center justify-end gap-2">
-                          <Link href={`/services/${s.id}`} className="text-xs font-medium text-gray-600 hover:underline">Edit</Link>
+                          <Link href={`/services/${s.id}`} className="text-xs font-medium text-muted hover:underline">Edit</Link>
                           <form action={toggleServiceActive.bind(null, s.id)}>
                             <button className="text-xs font-medium text-brand-600 hover:underline">
                               {s.active ? "Deactivate" : "Activate"}

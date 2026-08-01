@@ -40,20 +40,20 @@ export default async function AssetsOverviewPage() {
       <div className="mt-6 grid gap-6 lg:grid-cols-5">
         {/* Devices by status */}
         <div className="card p-5 lg:col-span-3">
-          <p className="text-sm font-medium text-gray-900">Devices by status</p>
+          <p className="text-sm font-medium text-fg">Devices by status</p>
           {totalDevices === 0 ? (
-            <p className="mt-3 text-sm text-gray-500">No devices yet.</p>
+            <p className="mt-3 text-sm text-muted">No devices yet.</p>
           ) : (
             <div className="mt-4 space-y-2">
               {DEVICE_STATUSES.map((s) => {
                 const n = countFor(s);
                 return (
                   <div key={s} className="flex items-center gap-3">
-                    <span className="w-28 shrink-0 text-xs text-gray-600">{DEVICE_STATUS_LABELS[s as DeviceStatus]}</span>
-                    <div className="h-4 flex-1 rounded bg-gray-100">
+                    <span className="w-28 shrink-0 text-xs text-muted">{DEVICE_STATUS_LABELS[s as DeviceStatus]}</span>
+                    <div className="h-4 flex-1 rounded bg-surface-2">
                       <div className="h-4 rounded bg-brand-500" style={{ width: `${Math.round((n / maxStatus) * 100)}%` }} />
                     </div>
-                    <span className="w-8 text-right text-xs font-medium text-gray-700">{n}</span>
+                    <span className="w-8 text-right text-xs font-medium text-fg">{n}</span>
                   </div>
                 );
               })}
@@ -63,16 +63,16 @@ export default async function AssetsOverviewPage() {
 
         {/* Spend */}
         <div className="card p-5 lg:col-span-2">
-          <p className="text-sm font-medium text-gray-900">Procurement spend</p>
-          <p className="mt-0.5 text-xs text-gray-500">{supplierCount} supplier{supplierCount === 1 ? "" : "s"}</p>
+          <p className="text-sm font-medium text-fg">Procurement spend</p>
+          <p className="mt-0.5 text-xs text-muted">{supplierCount} supplier{supplierCount === 1 ? "" : "s"}</p>
           {spendByCurrency.length === 0 ? (
-            <p className="mt-3 text-sm text-gray-500">No purchases recorded yet.</p>
+            <p className="mt-3 text-sm text-muted">No purchases recorded yet.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {spendByCurrency.map((r) => (
                 <li key={r.currency} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">{r.currency} · {r._count._all} purchase{r._count._all === 1 ? "" : "s"}</span>
-                  <span className="text-sm font-semibold text-gray-900">
+                  <span className="text-sm text-muted">{r.currency} · {r._count._all} purchase{r._count._all === 1 ? "" : "s"}</span>
+                  <span className="text-sm font-semibold text-fg">
                     {formatMoneyCompact(r._sum.amountMinor ?? 0, r.currency as Currency)}
                   </span>
                 </li>
@@ -84,15 +84,15 @@ export default async function AssetsOverviewPage() {
 
       {/* Recent purchases */}
       <div className="card mt-6 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-gray-100 p-4">
-          <p className="text-sm font-medium text-gray-900">Recent purchases</p>
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <p className="text-sm font-medium text-fg">Recent purchases</p>
           <Link href="/purchases" className="text-xs font-medium text-brand-600 hover:underline">All purchases</Link>
         </div>
         {recentPurchases.length === 0 ? (
-          <p className="p-4 text-sm text-gray-400">No purchases yet.</p>
+          <p className="p-4 text-sm text-faint">No purchases yet.</p>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-surface-2">
               <tr>
                 <th className="th">Date</th>
                 <th className="th">Reference</th>
@@ -101,9 +101,9 @@ export default async function AssetsOverviewPage() {
                 <th className="th text-right">Amount</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {recentPurchases.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-50">
+                <tr key={p.id} className="hover:bg-surface-2">
                   <td className="td whitespace-nowrap">
                     <Link href={`/purchases/${p.id}`} className="text-brand-600 hover:underline">{format(p.purchaseDate, "d MMM yyyy")}</Link>
                   </td>

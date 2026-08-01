@@ -37,7 +37,7 @@ export function DocumentForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+    <form onSubmit={onSubmit} className="space-y-3 rounded-lg border border-dashed border-border p-4">
       {entryId && <input type="hidden" name="entryId" value={entryId} />}
       {purchaseId && <input type="hidden" name="purchaseId" value={purchaseId} />}
       {deviceId && <input type="hidden" name="deviceId" value={deviceId} />}
@@ -47,14 +47,14 @@ export function DocumentForm({
         <button
           type="button"
           onClick={() => setKind("FILE")}
-          className={`rounded-lg px-3 py-1 text-sm font-medium ${kind === "FILE" ? "bg-brand-600 text-white" : "bg-white ring-1 ring-inset ring-gray-300"}`}
+          className={`rounded-lg px-3 py-1 text-sm font-medium ${kind === "FILE" ? "bg-brand-600 text-white" : "bg-surface ring-1 ring-inset ring-border"}`}
         >
           Upload file
         </button>
         <button
           type="button"
           onClick={() => setKind("LINK")}
-          className={`rounded-lg px-3 py-1 text-sm font-medium ${kind === "LINK" ? "bg-brand-600 text-white" : "bg-white ring-1 ring-inset ring-gray-300"}`}
+          className={`rounded-lg px-3 py-1 text-sm font-medium ${kind === "LINK" ? "bg-brand-600 text-white" : "bg-surface ring-1 ring-inset ring-border"}`}
         >
           Paste a link
         </button>
@@ -78,7 +78,7 @@ export function DocumentForm({
       )}
 
       {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
 
       <button className="btn-primary" type="submit" disabled={pending}>

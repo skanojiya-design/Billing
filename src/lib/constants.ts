@@ -121,20 +121,21 @@ export function monthLabel(year: number, month: number): string {
 }
 
 // Tailwind classes for status badges, keyed by status value.
+// Alpha-based tints so badges read well on both light and dark surfaces.
 export const STATUS_BADGE: Record<string, string> = {
-  PENDING: "bg-amber-100 text-amber-800",
-  PAID: "bg-green-100 text-green-800",
-  OVERDUE: "bg-red-100 text-red-800",
-  ACTIVE: "bg-green-100 text-green-800",
-  INACTIVE: "bg-gray-100 text-gray-500",
-  QUEUED: "bg-amber-100 text-amber-800",
-  SENT: "bg-green-100 text-green-800",
-  FAILED: "bg-red-100 text-red-800",
+  PENDING: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  PAID: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  OVERDUE: "bg-red-500/15 text-red-600 dark:text-red-400",
+  ACTIVE: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  INACTIVE: "bg-slate-500/15 text-muted",
+  QUEUED: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  SENT: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  FAILED: "bg-red-500/15 text-red-600 dark:text-red-400",
   // Device lifecycle
-  IN_STOCK: "bg-gray-100 text-gray-700",
-  DEPLOYED: "bg-green-100 text-green-800",
-  FAULTY: "bg-red-100 text-red-800",
-  IN_REPAIR: "bg-amber-100 text-amber-800",
-  RETURNED: "bg-blue-100 text-blue-800",
-  RETIRED: "bg-gray-100 text-gray-500",
+  IN_STOCK: "bg-slate-500/15 text-muted",
+  DEPLOYED: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  FAULTY: "bg-red-500/15 text-red-600 dark:text-red-400",
+  IN_REPAIR: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  RETURNED: "bg-brand-500/15 text-brand-600 dark:text-brand-500",
+  RETIRED: "bg-slate-500/15 text-muted",
 };

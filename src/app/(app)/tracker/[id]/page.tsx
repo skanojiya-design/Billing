@@ -78,14 +78,14 @@ export default async function EditEntryPage({
 
         <div className="space-y-4">
           <div className="card p-5">
-            <p className="text-sm font-medium text-gray-900">Documents</p>
-            <p className="mt-0.5 text-xs text-gray-500">Invoices &amp; receipts for this payment.</p>
+            <p className="text-sm font-medium text-fg">Documents</p>
+            <p className="mt-0.5 text-xs text-muted">Invoices &amp; receipts for this payment.</p>
             {entry.documents.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-400">None attached yet.</p>
+              <p className="mt-3 text-sm text-faint">None attached yet.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {entry.documents.map((doc) => (
-                  <li key={doc.id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2">
+                  <li key={doc.id} className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-3 py-2">
                     <div className="min-w-0">
                       {doc.kind === "LINK" ? (
                         <a href={doc.externalUrl ?? "#"} target="_blank" rel="noreferrer" className="truncate text-sm text-brand-600 hover:underline">
@@ -96,7 +96,7 @@ export default async function EditEntryPage({
                           📄 {doc.title}
                         </a>
                       )}
-                      <p className="text-[11px] text-gray-400">
+                      <p className="text-[11px] text-faint">
                         {doc.uploadedBy?.name ?? "—"} · {format(doc.createdAt, "d MMM yyyy")}
                       </p>
                     </div>

@@ -32,7 +32,7 @@ export function RunButton({
       <button className={className} onClick={onClick} disabled={pending}>
         {pending ? "Working…" : label}
       </button>
-      {msg && <span className="text-sm text-gray-600">{msg}</span>}
+      {msg && <span className="text-sm text-muted">{msg}</span>}
     </div>
   );
 }

@@ -88,8 +88,8 @@ export function ServiceForm({ service, backHref = "/services" }: { service?: Ser
           <input className="input" name="vendorUrl" defaultValue={service?.vendorUrl ?? ""} placeholder="https://…" />
         </div>
         <div className="flex items-end">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" name="active" defaultChecked={service ? service.active : true} className="h-4 w-4 rounded border-gray-300" />
+          <label className="flex items-center gap-2 text-sm text-fg">
+            <input type="checkbox" name="active" defaultChecked={service ? service.active : true} className="h-4 w-4 rounded border-border" />
             Active (include in monthly generation)
           </label>
         </div>

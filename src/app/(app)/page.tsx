@@ -76,7 +76,7 @@ export default async function DashboardPage() {
       <div className="mt-6 grid gap-6 lg:grid-cols-5">
         {/* Chart */}
         <div className="card p-5 lg:col-span-3">
-          <p className="text-sm font-medium text-gray-900">Paid per month (INR)</p>
+          <p className="text-sm font-medium text-fg">Paid per month (INR)</p>
           <div className="mt-6 flex items-end justify-between gap-3" style={{ height: 160 }}>
             {chart.map((c) => (
               <div key={`${c.year}-${c.month}`} className="flex flex-1 flex-col items-center gap-2">
@@ -87,7 +87,7 @@ export default async function DashboardPage() {
                     title={formatMoney(c.paid, "INR")}
                   />
                 </div>
-                <span className="text-[11px] text-gray-500">{MONTH_NAMES[c.month - 1].slice(0, 3)}</span>
+                <span className="text-[11px] text-muted">{MONTH_NAMES[c.month - 1].slice(0, 3)}</span>
               </div>
             ))}
           </div>
@@ -95,23 +95,23 @@ export default async function DashboardPage() {
 
         {/* Needs attention */}
         <div className="card p-5 lg:col-span-2">
-          <p className="text-sm font-medium text-gray-900">Needs attention</p>
+          <p className="text-sm font-medium text-fg">Needs attention</p>
           {attention.length === 0 ? (
-            <p className="mt-3 text-sm text-gray-500">Nothing outstanding. 🎉</p>
+            <p className="mt-3 text-sm text-muted">Nothing outstanding. 🎉</p>
           ) : (
-            <ul className="mt-3 divide-y divide-gray-100">
+            <ul className="mt-3 divide-y divide-border">
               {attention.map((e) => (
                 <li key={e.id} className="flex items-center justify-between gap-2 py-2">
                   <Link href={`/tracker?y=${e.periodYear}&m=${e.periodMonth}`} className="min-w-0">
-                    <p className="truncate text-sm font-medium text-gray-900">{e.serviceName}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="truncate text-sm font-medium text-fg">{e.serviceName}</p>
+                    <p className="text-xs text-muted">
                       {monthLabel(e.periodYear, e.periodMonth)}
                       {e.dueDate ? ` · due ${format(e.dueDate, "d MMM")}` : ""}
                     </p>
                   </Link>
                   <div className="flex flex-col items-end gap-1">
                     <StatusBadge status={e.status} />
-                    <span className="text-xs text-gray-600">
+                    <span className="text-xs text-muted">
                       <Money minor={e.amountInrPaise} currency="INR" />
                     </span>
                   </div>

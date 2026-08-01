@@ -48,13 +48,13 @@ export default async function PurchaseDetailPage({ params }: { params: { id: str
           {editable ? (
             <PurchaseForm purchase={purchase} suppliers={suppliers} />
           ) : (
-            <div className="card p-6 text-sm text-gray-600">Read-only — ask an editor to make changes.</div>
+            <div className="card p-6 text-sm text-muted">Read-only — ask an editor to make changes.</div>
           )}
 
           {/* Devices from this purchase */}
           <div className="card overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-100 p-4">
-              <p className="text-sm font-medium text-gray-900">Devices from this purchase ({purchase.devices.length})</p>
+            <div className="flex items-center justify-between border-b border-border p-4">
+              <p className="text-sm font-medium text-fg">Devices from this purchase ({purchase.devices.length})</p>
               {editable && (
                 <Link href={`/devices/new?purchaseId=${purchase.id}${purchase.supplierId ? `&supplierId=${purchase.supplierId}` : ""}`} className="btn-primary text-xs">
                   Add device
@@ -62,19 +62,19 @@ export default async function PurchaseDetailPage({ params }: { params: { id: str
               )}
             </div>
             {purchase.devices.length === 0 ? (
-              <p className="p-4 text-sm text-gray-400">No devices recorded against this purchase yet.</p>
+              <p className="p-4 text-sm text-faint">No devices recorded against this purchase yet.</p>
             ) : (
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-border">
+                <thead className="bg-surface-2">
                   <tr>
                     <th className="th">Category / Model</th>
                     <th className="th">Serial</th>
                     <th className="th">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-border">
                   {purchase.devices.map((d) => (
-                    <tr key={d.id} className="hover:bg-gray-50">
+                    <tr key={d.id} className="hover:bg-surface-2">
                       <td className="td">
                         <Link href={`/devices/${d.id}`} className="font-medium text-brand-600 hover:underline">
                           {d.category}{d.model ? ` · ${d.model}` : ""}
@@ -92,21 +92,21 @@ export default async function PurchaseDetailPage({ params }: { params: { id: str
 
         {/* Documents */}
         <div className="card p-5">
-          <p className="text-sm font-medium text-gray-900">Documents</p>
-          <p className="mt-0.5 text-xs text-gray-500">Invoice, delivery note, warranty card…</p>
+          <p className="text-sm font-medium text-fg">Documents</p>
+          <p className="mt-0.5 text-xs text-muted">Invoice, delivery note, warranty card…</p>
           {purchase.documents.length === 0 ? (
-            <p className="mt-3 text-sm text-gray-400">None attached yet.</p>
+            <p className="mt-3 text-sm text-faint">None attached yet.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {purchase.documents.map((doc) => (
-                <li key={doc.id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2">
+                <li key={doc.id} className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-3 py-2">
                   <div className="min-w-0">
                     {doc.kind === "LINK" ? (
                       <a href={doc.externalUrl ?? "#"} target="_blank" rel="noreferrer" className="truncate text-sm text-brand-600 hover:underline">🔗 {doc.title}</a>
                     ) : (
                       <a href={`/api/documents/${doc.id}`} className="truncate text-sm text-brand-600 hover:underline">📄 {doc.title}</a>
                     )}
-                    <p className="text-[11px] text-gray-400">{doc.uploadedBy?.name ?? "—"} · {format(doc.createdAt, "d MMM yyyy")}</p>
+                    <p className="text-[11px] text-faint">{doc.uploadedBy?.name ?? "—"} · {format(doc.createdAt, "d MMM yyyy")}</p>
                   </div>
                   {editable && <DeleteDocButton id={doc.id} />}
                 </li>

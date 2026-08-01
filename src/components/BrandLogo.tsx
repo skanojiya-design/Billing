@@ -16,7 +16,7 @@ export function BrandLogo({ className = "h-6 w-auto" }: { className?: string }) 
   }, []);
 
   if (errored) {
-    return <span className="text-lg font-extrabold tracking-tight text-gray-800">ROQIT</span>;
+    return <span className="text-lg font-extrabold tracking-tight text-fg">ROQIT</span>;
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element

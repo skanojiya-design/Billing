@@ -85,13 +85,13 @@ export default async function DevicesPage({
 
       {devices.length === 0 ? (
         <div className="card p-10 text-center">
-          <p className="text-sm font-medium text-gray-900">No devices found.</p>
-          {editable && <p className="mt-1 text-sm text-gray-500">Add devices directly, or from a purchase.</p>}
+          <p className="text-sm font-medium text-fg">No devices found.</p>
+          {editable && <p className="mt-1 text-sm text-muted">Add devices directly, or from a purchase.</p>}
         </div>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-surface-2">
               <tr>
                 <th className="th">Category / Model</th>
                 <th className="th">Serial</th>
@@ -102,14 +102,14 @@ export default async function DevicesPage({
                 <th className="th text-right">Cost</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {devices.map((d) => (
-                <tr key={d.id} className="hover:bg-gray-50">
+                <tr key={d.id} className="hover:bg-surface-2">
                   <td className="td">
                     <Link href={`/devices/${d.id}`} className="font-medium text-brand-600 hover:underline">
                       {d.category}
                     </Link>
-                    {(d.make || d.model) && <p className="text-xs text-gray-400">{[d.make, d.model].filter(Boolean).join(" ")}</p>}
+                    {(d.make || d.model) && <p className="text-xs text-faint">{[d.make, d.model].filter(Boolean).join(" ")}</p>}
                   </td>
                   <td className="td">{d.serialNo || "—"}</td>
                   <td className="td">{d.imei || "—"}</td>
@@ -117,7 +117,7 @@ export default async function DevicesPage({
                   <td className="td"><StatusBadge status={d.status} label={DEVICE_STATUS_LABELS[d.status as DeviceStatus] ?? d.status} /></td>
                   <td className="td">
                     {d.location || "—"}
-                    {d.assignedTo && <p className="text-xs text-gray-400">{d.assignedTo}</p>}
+                    {d.assignedTo && <p className="text-xs text-faint">{d.assignedTo}</p>}
                   </td>
                   <td className="td text-right">{d.costMinor ? formatMoneyCompact(d.costMinor, d.currency as Currency) : "—"}</td>
                 </tr>

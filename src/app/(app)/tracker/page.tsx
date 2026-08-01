@@ -102,7 +102,7 @@ export default async function TrackerPage({
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Link
           href={`/tracker?y=${prev.getFullYear()}&m=${prev.getMonth() + 1}`}
-          className="rounded-lg px-2 py-1 text-sm text-gray-500 hover:bg-gray-100"
+          className="rounded-lg px-2 py-1 text-sm text-muted hover:bg-surface-2"
         >
           ‹ Prev
         </Link>
@@ -113,7 +113,7 @@ export default async function TrackerPage({
               key={key(t.year, t.month)}
               href={`/tracker?y=${t.year}&m=${t.month}`}
               className={`rounded-lg px-3 py-1 text-sm font-medium ${
-                active ? "bg-brand-600 text-white" : "bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50"
+                active ? "bg-brand-600 text-white" : "bg-surface text-muted ring-1 ring-inset ring-border hover:bg-surface-2"
               }`}
             >
               {MONTH_NAMES[t.month - 1].slice(0, 3)} {t.year}
@@ -122,7 +122,7 @@ export default async function TrackerPage({
         })}
         <Link
           href={`/tracker?y=${next.getFullYear()}&m=${next.getMonth() + 1}`}
-          className="rounded-lg px-2 py-1 text-sm text-gray-500 hover:bg-gray-100"
+          className="rounded-lg px-2 py-1 text-sm text-muted hover:bg-surface-2"
         >
           Next ›
         </Link>
@@ -130,10 +130,10 @@ export default async function TrackerPage({
 
       {entries.length === 0 ? (
         <div className="card p-10 text-center">
-          <p className="text-sm font-medium text-gray-900">No rows for {monthLabel(year, month)} yet.</p>
+          <p className="text-sm font-medium text-fg">No rows for {monthLabel(year, month)} yet.</p>
           {editable ? (
             <>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted">
                 Start this month by copying last month, generating from your services, or adding rows by hand.
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -153,13 +153,13 @@ export default async function TrackerPage({
               </div>
             </>
           ) : (
-            <p className="mt-1 text-sm text-gray-500">Ask an editor to add this month's payments.</p>
+            <p className="mt-1 text-sm text-muted">Ask an editor to add this month's payments.</p>
           )}
         </div>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-surface-2">
               <tr>
                 <th className="th">Service</th>
                 <th className="th">Type</th>
@@ -176,10 +176,10 @@ export default async function TrackerPage({
                 {editable && <th className="th text-right">Actions</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {entries.map((e) => (
-                <tr key={e.id} className="hover:bg-gray-50">
-                  <td className="td font-medium text-gray-900">{e.serviceName}</td>
+                <tr key={e.id} className="hover:bg-surface-2">
+                  <td className="td font-medium text-fg">{e.serviceName}</td>
                   <td className="td">{VENDOR_TYPE_LABELS[e.vendorType as VendorType] ?? e.vendorType}</td>
                   <td className="td">{BILLING_FREQUENCY_LABELS[e.billingFrequency as BillingFrequency] ?? e.billingFrequency}</td>
                   <td className="td">{e.dueDate ? format(e.dueDate, "d-MMM-yy") : "—"}</td>
@@ -193,7 +193,7 @@ export default async function TrackerPage({
                   </td>
                   <td className="td">
                     {e.documents.length === 0 ? (
-                      <span className="text-gray-300">—</span>
+                      <span className="text-faint">—</span>
                     ) : (
                       <div className="flex flex-col gap-0.5">
                         {e.documents.map((doc) =>
@@ -211,7 +211,7 @@ export default async function TrackerPage({
                     )}
                   </td>
                   <td className="td max-w-[16rem]">
-                    <span className="line-clamp-2 text-xs text-gray-500">{e.notes}</span>
+                    <span className="line-clamp-2 text-xs text-muted">{e.notes}</span>
                   </td>
                   {editable && (
                     <td className="td">
@@ -221,8 +221,8 @@ export default async function TrackerPage({
                 </tr>
               ))}
             </tbody>
-            <tfoot className="bg-gray-50">
-              <tr className="font-semibold text-gray-900">
+            <tfoot className="bg-surface-2">
+              <tr className="font-semibold text-fg">
                 <td className="td" colSpan={6}>Total</td>
                 <td className="td text-right">{formatMoneyCompact(totals.inr, "INR")}</td>
                 <td className="td text-right">{formatMoneyCompact(totals.usd, "USD")}</td>
