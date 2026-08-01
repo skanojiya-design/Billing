@@ -5,13 +5,29 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ROLE_LABELS, type Role } from "@/lib/constants";
 
-const NAV = [
-  { href: "/", label: "Dashboard", icon: "📊" },
-  { href: "/tracker", label: "Monthly Tracker", icon: "🗓️" },
-  { href: "/services", label: "Services", icon: "🔁" },
-  { href: "/documents", label: "Documents", icon: "📁" },
-  { href: "/alerts", label: "Alerts & Email", icon: "🔔" },
-  { href: "/team", label: "Team", icon: "👥", adminOnly: true },
+type NavItem = { href: string; label: string; icon: string; adminOnly?: boolean };
+const SECTIONS: { heading?: string; items: NavItem[] }[] = [
+  {
+    items: [
+      { href: "/", label: "Dashboard", icon: "📊" },
+      { href: "/tracker", label: "Monthly Tracker", icon: "🗓️" },
+      { href: "/services", label: "Services", icon: "🔁" },
+      { href: "/documents", label: "Documents", icon: "📁" },
+      { href: "/alerts", label: "Alerts & Email", icon: "🔔" },
+    ],
+  },
+  {
+    heading: "Assets",
+    items: [
+      { href: "/assets", label: "Assets overview", icon: "📦" },
+      { href: "/suppliers", label: "Suppliers", icon: "🏭" },
+      { href: "/purchases", label: "Purchases", icon: "🧾" },
+      { href: "/devices", label: "Devices", icon: "📟" },
+    ],
+  },
+  {
+    items: [{ href: "/team", label: "Team", icon: "👥", adminOnly: true }],
+  },
 ];
 
 function Logo() {
@@ -29,28 +45,41 @@ function Logo() {
 export function Sidebar({ user }: { user: { name: string; email: string; role: Role } }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const items = NAV.filter((i) => !i.adminOnly || user.role === "ADMIN");
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => setOpen(false), [pathname]);
 
+  const sections = SECTIONS.map((s) => ({
+    ...s,
+    items: s.items.filter((i) => !i.adminOnly || user.role === "ADMIN"),
+  })).filter((s) => s.items.length > 0);
+
   const navList = (
-    <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-      {items.map((item) => {
-        const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-              active ? "bg-brand-50 text-brand-700" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-            }`}
-          >
-            <span className="text-base">{item.icon}</span>
-            {item.label}
-          </Link>
-        );
-      })}
+    <nav className="flex-1 space-y-4 overflow-y-auto p-3">
+      {sections.map((section, i) => (
+        <div key={i} className="space-y-1">
+          {section.heading && (
+            <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              {section.heading}
+            </p>
+          )}
+          {section.items.map((item) => {
+            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  active ? "bg-brand-50 text-brand-700" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                }`}
+              >
+                <span className="text-base">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 

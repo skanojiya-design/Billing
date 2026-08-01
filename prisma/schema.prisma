@@ -109,7 +109,11 @@ model PaymentEntry {
 // ---------------------------------------------------------------------------
 model Document {
   id           String   @id @default(cuid())
-  entryId      String
+  // A document belongs to exactly one owner: a payment entry, a purchase, or a
+  // device. All three FKs are optional; whichever is set identifies the owner.
+  entryId      String?
+  purchaseId   String?
+  deviceId     String?
   kind         String   @default("FILE") // FILE | LINK
   title        String
   originalName String? // for FILE: the uploaded file name
@@ -120,7 +124,9 @@ model Document {
   uploadedById String?
   createdAt    DateTime @default(now())
 
-  entry      PaymentEntry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entry      PaymentEntry? @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  purchase   Purchase?     @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  device     Device?       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   uploadedBy User?         @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   blob       DocumentBlob?
 }
@@ -170,4 +176,101 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+}
+
+// ===========================================================================
+// Assets & Procurement — tracking the IoT devices the company buys, who from,
+// at what cost, and where each unit is deployed.
+// ===========================================================================
+
+// A party the company procures devices from (OEM / distributor / other).
+model Supplier {
+  id           String   @id @default(cuid())
+  name         String
+  type         String   @default("OEM") // OEM | DISTRIBUTOR | OTHER
+  contactName  String?
+  contactEmail String?
+  phone        String?
+  gstin        String?
+  address      String?
+  website      String?
+  notes        String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  purchases Purchase[]
+  devices   Device[]
+}
+
+// A procurement record — one order/invoice from a supplier.
+model Purchase {
+  id           String   @id @default(cuid())
+  supplierId   String?
+  purchaseDate DateTime @default(now())
+  reference    String? // PO / invoice number
+  currency     String   @default("INR") // INR | USD | EUR
+  amountMinor  Int      @default(0) // total cost in minor units
+  quantity     Int      @default(1)
+  notes        String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  supplier  Supplier?  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  devices   Device[]
+  documents Document[]
+
+  @@index([purchaseDate])
+}
+
+// A single physical device (asset), tracked individually by serial/IMEI.
+model Device {
+  id           String    @id @default(cuid())
+  purchaseId   String?
+  supplierId   String?
+  category     String    @default("Device") // free text: GPS Tracker, Gateway, Sensor…
+  make         String?
+  model        String?
+  serialNo     String?   @unique
+  imei         String?
+  assetTag     String?
+  costMinor    Int       @default(0)
+  currency     String    @default("INR")
+  purchaseDate DateTime?
+  status       String    @default("IN_STOCK") // IN_STOCK | DEPLOYED | FAULTY | IN_REPAIR | RETURNED | RETIRED
+  // Denormalized snapshot of the current deployment, for fast list rendering.
+  location     String?
+  assignedTo   String?
+  notes        String?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  purchase    Purchase?    @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  supplier    Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  deployments Deployment[]
+  documents   Document[]
+
+  @@index([status])
+  @@index([imei])
+}
+
+// A movement/assignment event in a device's history.
+model Deployment {
+  id          String    @id @default(cuid())
+  deviceId    String
+  action      String    @default("DEPLOYED") // DEPLOYED | RETURNED | TRANSFERRED | REPAIR
+  site        String?
+  customer    String?
+  assignedTo  String?
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+  notes       String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId])
 }
