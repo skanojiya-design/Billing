@@ -4,7 +4,17 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addDocument, deleteDocument } from "@/app/actions";
 
-export function DocumentForm({ entryId }: { entryId: string }) {
+// A document attaches to exactly one owner — a payment entry, a purchase, or a
+// device. Pass whichever id applies.
+export function DocumentForm({
+  entryId,
+  purchaseId,
+  deviceId,
+}: {
+  entryId?: string;
+  purchaseId?: string;
+  deviceId?: string;
+}) {
   const [kind, setKind] = useState<"FILE" | "LINK">("FILE");
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
@@ -28,7 +38,9 @@ export function DocumentForm({ entryId }: { entryId: string }) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
-      <input type="hidden" name="entryId" value={entryId} />
+      {entryId && <input type="hidden" name="entryId" value={entryId} />}
+      {purchaseId && <input type="hidden" name="purchaseId" value={purchaseId} />}
+      {deviceId && <input type="hidden" name="deviceId" value={deviceId} />}
       <input type="hidden" name="kind" value={kind} />
 
       <div className="flex gap-2">

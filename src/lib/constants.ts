@@ -63,6 +63,53 @@ export const CURRENCY_SYMBOLS: Record<Currency, string> = {
 export const EMAIL_TYPES = ["DUE_SOON", "OVERDUE", "GENERIC"] as const;
 export type EmailType = (typeof EMAIL_TYPES)[number];
 
+// --- Assets & Procurement ---------------------------------------------------
+export const SUPPLIER_TYPES = ["OEM", "DISTRIBUTOR", "OTHER"] as const;
+export type SupplierType = (typeof SUPPLIER_TYPES)[number];
+export const SUPPLIER_TYPE_LABELS: Record<SupplierType, string> = {
+  OEM: "OEM",
+  DISTRIBUTOR: "Distributor",
+  OTHER: "Other",
+};
+
+export const DEVICE_STATUSES = [
+  "IN_STOCK",
+  "DEPLOYED",
+  "FAULTY",
+  "IN_REPAIR",
+  "RETURNED",
+  "RETIRED",
+] as const;
+export type DeviceStatus = (typeof DEVICE_STATUSES)[number];
+export const DEVICE_STATUS_LABELS: Record<DeviceStatus, string> = {
+  IN_STOCK: "In stock",
+  DEPLOYED: "Deployed",
+  FAULTY: "Faulty",
+  IN_REPAIR: "In repair",
+  RETURNED: "Returned",
+  RETIRED: "Retired",
+};
+
+export const DEPLOYMENT_ACTIONS = ["DEPLOYED", "RETURNED", "TRANSFERRED", "REPAIR"] as const;
+export type DeploymentAction = (typeof DEPLOYMENT_ACTIONS)[number];
+export const DEPLOYMENT_ACTION_LABELS: Record<DeploymentAction, string> = {
+  DEPLOYED: "Deployed",
+  RETURNED: "Returned to stock",
+  TRANSFERRED: "Transferred",
+  REPAIR: "Sent for repair",
+};
+
+// A few suggested device categories (the field is free text).
+export const DEVICE_CATEGORY_SUGGESTIONS = [
+  "GPS Tracker",
+  "Gateway",
+  "Sensor",
+  "SIM / Connectivity",
+  "Camera",
+  "Controller",
+  "Other",
+] as const;
+
 // --- Month helpers ----------------------------------------------------------
 export const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -83,4 +130,11 @@ export const STATUS_BADGE: Record<string, string> = {
   QUEUED: "bg-amber-100 text-amber-800",
   SENT: "bg-green-100 text-green-800",
   FAILED: "bg-red-100 text-red-800",
+  // Device lifecycle
+  IN_STOCK: "bg-gray-100 text-gray-700",
+  DEPLOYED: "bg-green-100 text-green-800",
+  FAULTY: "bg-red-100 text-red-800",
+  IN_REPAIR: "bg-amber-100 text-amber-800",
+  RETURNED: "bg-blue-100 text-blue-800",
+  RETIRED: "bg-gray-100 text-gray-500",
 };

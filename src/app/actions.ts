@@ -227,14 +227,40 @@ export async function duplicatePreviousMonth(formData: FormData) {
 // --------------------------------------------------------------------------
 // Documents (invoices / receipts)
 // --------------------------------------------------------------------------
+// Resolve which owner a document form targets. Exactly one of entryId /
+// purchaseId / deviceId is expected; returns the owner data + revalidate path.
+async function resolveDocOwner(
+  formData: FormData,
+): Promise<{ owner: { entryId?: string; purchaseId?: string; deviceId?: string }; revalidate: string; entity: string; id: string } | { error: string }> {
+  const entryId = String(formData.get("entryId") || "");
+  const purchaseId = String(formData.get("purchaseId") || "");
+  const deviceId = String(formData.get("deviceId") || "");
+  if (entryId) {
+    const entry = await prisma.paymentEntry.findUnique({ where: { id: entryId } });
+    if (!entry) return { error: "Payment row not found." };
+    return { owner: { entryId }, revalidate: trackerPath(entry.periodYear, entry.periodMonth), entity: "PaymentEntry", id: entryId };
+  }
+  if (purchaseId) {
+    const p = await prisma.purchase.findUnique({ where: { id: purchaseId } });
+    if (!p) return { error: "Purchase not found." };
+    return { owner: { purchaseId }, revalidate: `/purchases/${purchaseId}`, entity: "Purchase", id: purchaseId };
+  }
+  if (deviceId) {
+    const d = await prisma.device.findUnique({ where: { id: deviceId } });
+    if (!d) return { error: "Device not found." };
+    return { owner: { deviceId }, revalidate: `/devices/${deviceId}`, entity: "Device", id: deviceId };
+  }
+  return { error: "No owner specified for the document." };
+}
+
 // Returns a result object (rather than throwing) so the form can show a clear
 // message instead of Next's opaque server-side-exception page.
 export async function addDocument(formData: FormData): Promise<{ ok?: true; error?: string }> {
   const user = await requireEditor(); // may redirect if logged out — fine, outside try
   try {
-    const entryId = String(formData.get("entryId") || "");
-    const entry = await prisma.paymentEntry.findUnique({ where: { id: entryId } });
-    if (!entry) return { error: "Payment row not found." };
+    const resolved = await resolveDocOwner(formData);
+    if ("error" in resolved) return { error: resolved.error };
+    const { owner, revalidate, entity, id } = resolved;
 
     const kind = String(formData.get("kind") || "FILE");
     const title = String(formData.get("title") || "").trim();
@@ -243,7 +269,7 @@ export async function addDocument(formData: FormData): Promise<{ ok?: true; erro
       const url = String(formData.get("externalUrl") || "").trim();
       if (!url) return { error: "Please provide a link." };
       await prisma.document.create({
-        data: { entryId, kind: "LINK", title: title || url, externalUrl: url, uploadedById: user.id },
+        data: { ...owner, kind: "LINK", title: title || url, externalUrl: url, uploadedById: user.id },
       });
     } else {
       const file = formData.get("file") as File | null;
@@ -253,7 +279,7 @@ export async function addDocument(formData: FormData): Promise<{ ok?: true; erro
       const bytes = Buffer.from(await file.arrayBuffer());
       await prisma.document.create({
         data: {
-          entryId,
+          ...owner,
           kind: "FILE",
           title: title || file.name,
           originalName: file.name,
@@ -264,8 +290,8 @@ export async function addDocument(formData: FormData): Promise<{ ok?: true; erro
         },
       });
     }
-    await audit(user.id, "ADD_DOCUMENT", "PaymentEntry", entryId, title);
-    revalidatePath(trackerPath(entry.periodYear, entry.periodMonth));
+    await audit(user.id, "ADD_DOCUMENT", entity, id, title);
+    revalidatePath(revalidate);
     revalidatePath("/documents");
     return { ok: true };
   } catch (e) {
@@ -282,6 +308,8 @@ export async function deleteDocument(id: string) {
   await prisma.document.delete({ where: { id } });
   await audit(user.id, "DELETE_DOCUMENT", "Document", id, doc.title);
   if (doc.entry) revalidatePath(trackerPath(doc.entry.periodYear, doc.entry.periodMonth));
+  if (doc.purchaseId) revalidatePath(`/purchases/${doc.purchaseId}`);
+  if (doc.deviceId) revalidatePath(`/devices/${doc.deviceId}`);
   revalidatePath("/documents");
 }
 
@@ -350,4 +378,238 @@ export async function flushOutboxAction() {
   await audit(user.id, "FLUSH_OUTBOX", "System", undefined, JSON.stringify(r));
   revalidatePath("/alerts");
   return { message: `Sent ${r.sent} email(s)${r.failed ? `, ${r.failed} failed` : ""}.` };
+}
+
+// ==========================================================================
+// Assets & Procurement
+// ==========================================================================
+
+// --- Suppliers / OEMs ------------------------------------------------------
+const supplierSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, "Name is required"),
+  type: z.enum(["OEM", "DISTRIBUTOR", "OTHER"]),
+  contactName: z.string().optional(),
+  contactEmail: z.string().optional(),
+  phone: z.string().optional(),
+  gstin: z.string().optional(),
+  address: z.string().optional(),
+  website: z.string().optional(),
+  notes: z.string().optional(),
+  active: z.coerce.boolean().optional(),
+});
+
+export async function saveSupplier(formData: FormData) {
+  const user = await requireEditor();
+  const raw = Object.fromEntries(formData) as Record<string, string>;
+  const p = supplierSchema.parse({ ...raw, active: raw.active === "on" || raw.active === "true" });
+  const data = {
+    name: p.name.trim(),
+    type: p.type,
+    contactName: p.contactName?.trim() || null,
+    contactEmail: p.contactEmail?.trim() || null,
+    phone: p.phone?.trim() || null,
+    gstin: p.gstin?.trim() || null,
+    address: p.address?.trim() || null,
+    website: p.website?.trim() || null,
+    notes: p.notes?.trim() || null,
+    active: p.active ?? true,
+  };
+  if (p.id) {
+    await prisma.supplier.update({ where: { id: p.id }, data });
+    await audit(user.id, "UPDATE", "Supplier", p.id, data.name);
+  } else {
+    const c = await prisma.supplier.create({ data });
+    await audit(user.id, "CREATE", "Supplier", c.id, data.name);
+  }
+  revalidatePath("/suppliers");
+  redirect("/suppliers");
+}
+
+export async function toggleSupplierActive(id: string) {
+  const user = await requireEditor();
+  const s = await prisma.supplier.findUnique({ where: { id } });
+  if (!s) return;
+  await prisma.supplier.update({ where: { id }, data: { active: !s.active } });
+  await audit(user.id, s.active ? "DEACTIVATE" : "ACTIVATE", "Supplier", id, s.name);
+  revalidatePath("/suppliers");
+}
+
+// --- Purchases -------------------------------------------------------------
+const purchaseSchema = z.object({
+  id: z.string().optional(),
+  supplierId: z.string().optional(),
+  purchaseDate: z.string().optional(),
+  reference: z.string().optional(),
+  currency: z.enum(["INR", "USD", "EUR"]),
+  amount: z.coerce.number().min(0).default(0),
+  quantity: z.coerce.number().int().min(0).default(1),
+  notes: z.string().optional(),
+});
+
+export async function savePurchase(formData: FormData) {
+  const user = await requireEditor();
+  const p = purchaseSchema.parse(Object.fromEntries(formData));
+  const data = {
+    supplierId: p.supplierId || null,
+    purchaseDate: parseDate(p.purchaseDate) ?? new Date(),
+    reference: p.reference?.trim() || null,
+    currency: p.currency,
+    amountMinor: majorToMinor(p.amount),
+    quantity: p.quantity,
+    notes: p.notes?.trim() || null,
+  };
+  let id = p.id;
+  if (p.id) {
+    await prisma.purchase.update({ where: { id: p.id }, data });
+    await audit(user.id, "UPDATE", "Purchase", p.id, data.reference ?? "");
+  } else {
+    const c = await prisma.purchase.create({ data: { ...data, createdById: user.id } });
+    id = c.id;
+    await audit(user.id, "CREATE", "Purchase", c.id, data.reference ?? "");
+  }
+  revalidatePath("/purchases");
+  redirect(`/purchases/${id}`);
+}
+
+export async function deletePurchase(id: string) {
+  const user = await requireEditor();
+  const p = await prisma.purchase.findUnique({ where: { id } });
+  if (!p) return;
+  await prisma.purchase.delete({ where: { id } });
+  await audit(user.id, "DELETE", "Purchase", id, p.reference ?? "");
+  revalidatePath("/purchases");
+  redirect("/purchases");
+}
+
+// --- Devices ---------------------------------------------------------------
+const deviceSchema = z.object({
+  id: z.string().optional(),
+  purchaseId: z.string().optional(),
+  supplierId: z.string().optional(),
+  category: z.string().optional(),
+  make: z.string().optional(),
+  model: z.string().optional(),
+  serialNo: z.string().optional(),
+  imei: z.string().optional(),
+  assetTag: z.string().optional(),
+  cost: z.coerce.number().min(0).default(0),
+  currency: z.enum(["INR", "USD", "EUR"]),
+  purchaseDate: z.string().optional(),
+  status: z.enum(["IN_STOCK", "DEPLOYED", "FAULTY", "IN_REPAIR", "RETURNED", "RETIRED"]),
+  notes: z.string().optional(),
+});
+
+export async function saveDevice(formData: FormData): Promise<{ ok?: true; error?: string }> {
+  const user = await requireEditor();
+  const p = deviceSchema.parse(Object.fromEntries(formData));
+  const data = {
+    purchaseId: p.purchaseId || null,
+    supplierId: p.supplierId || null,
+    category: p.category?.trim() || "Device",
+    make: p.make?.trim() || null,
+    model: p.model?.trim() || null,
+    serialNo: p.serialNo?.trim() || null,
+    imei: p.imei?.trim() || null,
+    assetTag: p.assetTag?.trim() || null,
+    costMinor: majorToMinor(p.cost),
+    currency: p.currency,
+    purchaseDate: parseDate(p.purchaseDate),
+    status: p.status,
+    notes: p.notes?.trim() || null,
+  };
+  try {
+    if (p.id) {
+      await prisma.device.update({ where: { id: p.id }, data });
+      await audit(user.id, "UPDATE", "Device", p.id, data.serialNo ?? data.model ?? "device");
+    } else {
+      const c = await prisma.device.create({ data: { ...data, createdById: user.id } });
+      await audit(user.id, "CREATE", "Device", c.id, data.serialNo ?? data.model ?? "device");
+    }
+  } catch (e) {
+    if ((e as { code?: string }).code === "P2002") {
+      return { error: `A device with serial "${data.serialNo}" already exists.` };
+    }
+    throw e;
+  }
+  revalidatePath("/devices");
+  redirect("/devices");
+}
+
+export async function changeDeviceStatus(id: string, status: string) {
+  const user = await requireEditor();
+  const d = await prisma.device.findUnique({ where: { id } });
+  if (!d) return;
+  await prisma.device.update({ where: { id }, data: { status } });
+  await audit(user.id, "CHANGE_STATUS", "Device", id, status);
+  revalidatePath(`/devices/${id}`);
+  revalidatePath("/devices");
+}
+
+export async function deleteDevice(id: string) {
+  const user = await requireEditor();
+  const d = await prisma.device.findUnique({ where: { id } });
+  if (!d) return;
+  await prisma.device.delete({ where: { id } });
+  await audit(user.id, "DELETE", "Device", id, d.serialNo ?? d.model ?? "");
+  revalidatePath("/devices");
+  redirect("/devices");
+}
+
+// --- Deployment (assignment / movement) ------------------------------------
+const deploymentSchema = z.object({
+  deviceId: z.string(),
+  action: z.enum(["DEPLOYED", "RETURNED", "TRANSFERRED", "REPAIR"]),
+  site: z.string().optional(),
+  customer: z.string().optional(),
+  assignedTo: z.string().optional(),
+  startDate: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export async function addDeployment(formData: FormData) {
+  const user = await requireEditor();
+  const p = deploymentSchema.parse(Object.fromEntries(formData));
+  const device = await prisma.device.findUnique({ where: { id: p.deviceId } });
+  if (!device) throw new Error("Device not found");
+
+  // Close any still-open deployment so history stays tidy.
+  await prisma.deployment.updateMany({
+    where: { deviceId: p.deviceId, endDate: null },
+    data: { endDate: new Date() },
+  });
+
+  await prisma.deployment.create({
+    data: {
+      deviceId: p.deviceId,
+      action: p.action,
+      site: p.site?.trim() || null,
+      customer: p.customer?.trim() || null,
+      assignedTo: p.assignedTo?.trim() || null,
+      startDate: parseDate(p.startDate) ?? new Date(),
+      notes: p.notes?.trim() || null,
+      createdById: user.id,
+    },
+  });
+
+  // Update the device's current snapshot from the action.
+  let status = device.status;
+  let location = device.location;
+  let assignedTo = device.assignedTo;
+  if (p.action === "DEPLOYED" || p.action === "TRANSFERRED") {
+    status = "DEPLOYED";
+    location = p.site?.trim() || p.customer?.trim() || location;
+    assignedTo = p.assignedTo?.trim() || assignedTo;
+  } else if (p.action === "RETURNED") {
+    status = "IN_STOCK";
+    location = null;
+    assignedTo = null;
+  } else if (p.action === "REPAIR") {
+    status = "IN_REPAIR";
+  }
+  await prisma.device.update({ where: { id: p.deviceId }, data: { status, location, assignedTo } });
+  await audit(user.id, "DEPLOYMENT", "Device", p.deviceId, p.action);
+  revalidatePath(`/devices/${p.deviceId}`);
+  revalidatePath("/devices");
+  redirect(`/devices/${p.deviceId}`);
 }
