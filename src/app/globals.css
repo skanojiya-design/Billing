@@ -88,6 +88,41 @@ body {
   }
 }
 
+/* Collapsible desktop sidebar (icon rail). Width + transition live here so the
+   layout has no flash on load — an inline script sets .sidebar-collapsed on
+   <html> before paint. All rules are scoped to .app-sidebar so the mobile
+   drawer (which reuses the same nav markup) is never affected. */
+.app-sidebar {
+  width: 15rem;
+  transition: width 0.2s ease;
+}
+.sidebar-mini-logo {
+  display: none;
+}
+.sidebar-collapsed .app-sidebar {
+  width: 4.25rem;
+}
+.sidebar-collapsed .app-sidebar .sidebar-label {
+  display: none;
+}
+.sidebar-collapsed .app-sidebar .sidebar-full-logo {
+  display: none;
+}
+.sidebar-collapsed .app-sidebar .sidebar-mini-logo {
+  display: flex;
+}
+.sidebar-collapsed .app-sidebar .nav-link,
+.sidebar-collapsed .app-sidebar .sidebar-compact {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+.sidebar-collapsed .app-sidebar .sidebar-header {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
 /* Slim, theme-aware scrollbars. */
 * {
   scrollbar-width: thin;

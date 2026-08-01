@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 // Runs before paint to set the theme class from the saved choice or the OS
 // preference, avoiding a light/dark flash on load.
-const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}}catch(e){}})();`;
+const themeScript = `(function(){try{var d=document.documentElement;var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){d.classList.add('dark');}if(localStorage.getItem('sidebar')==='collapsed'){d.classList.add('sidebar-collapsed');}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
