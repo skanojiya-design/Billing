@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export default function LoginPage() {
   return (
@@ -42,12 +43,9 @@ function LoginForm() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-white px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex items-center justify-center gap-2">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-600 text-lg font-bold text-white">r</span>
-          <div>
-            <p className="text-lg font-semibold leading-tight">roqit Billing</p>
-            <p className="text-xs text-gray-500 leading-tight">transactions & invoices</p>
-          </div>
+        <div className="mb-6 flex flex-col items-center gap-2">
+          <BrandLogo className="h-11 w-auto" />
+          <p className="text-xs text-gray-500 leading-tight">Billing · payment &amp; asset tracker</p>
         </div>
 
         <form onSubmit={onSubmit} className="card space-y-4 p-6">

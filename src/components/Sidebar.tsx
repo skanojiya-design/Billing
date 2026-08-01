@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ROLE_LABELS, type Role } from "@/lib/constants";
+import { BrandLogo } from "@/components/BrandLogo";
 
 type NavItem = { href: string; label: string; icon: string; adminOnly?: boolean };
 const SECTIONS: { heading?: string; items: NavItem[] }[] = [
@@ -33,11 +34,8 @@ const SECTIONS: { heading?: string; items: NavItem[] }[] = [
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 text-sm font-bold text-white">r</span>
-      <div>
-        <p className="text-sm font-semibold leading-tight">roqit Billing</p>
-        <p className="text-[11px] text-gray-400 leading-tight">payment tracker</p>
-      </div>
+      <BrandLogo className="h-6 w-auto" />
+      <span className="border-l border-gray-200 pl-2 text-xs font-medium text-gray-400">Billing</span>
     </div>
   );
 }
