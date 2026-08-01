@@ -31,7 +31,7 @@ export function UserForm({ user }: { user?: UserData }) {
       <div>
         <label className="label">{user ? "New password (leave blank to keep)" : "Password"}</label>
         <input className="input" name="password" type="text" placeholder="at least 6 characters" autoComplete="new-password" />
-        <p className="mt-1 text-xs text-gray-400">Share this with the member so they can sign in.</p>
+        <p className="mt-1 text-xs text-faint">Share this with the member so they can sign in.</p>
       </div>
 
       <div className="flex items-center gap-3">

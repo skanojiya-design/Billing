@@ -6,7 +6,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 // Record a deployment / movement event for a device.
 export function DeploymentForm({ deviceId }: { deviceId: string }) {
   return (
-    <form action={addDeployment} className="space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+    <form action={addDeployment} className="space-y-3 rounded-lg border border-dashed border-border p-4">
       <input type="hidden" name="deviceId" value={deviceId} />
       <div className="grid gap-3 sm:grid-cols-2">
         <div>

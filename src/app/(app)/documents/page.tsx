@@ -75,13 +75,13 @@ export default async function DocumentsPage({
 
       {filtered.length === 0 ? (
         <div className="card p-10 text-center">
-          <p className="text-sm font-medium text-gray-900">No documents found.</p>
-          <p className="mt-1 text-sm text-gray-500">Attach files from a payment row, a purchase, or a device.</p>
+          <p className="text-sm font-medium text-fg">No documents found.</p>
+          <p className="mt-1 text-sm text-muted">Attach files from a payment row, a purchase, or a device.</p>
         </div>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-surface-2">
               <tr>
                 <th className="th">Document</th>
                 <th className="th">Attached to</th>
@@ -91,7 +91,7 @@ export default async function DocumentsPage({
                 <th className="th text-right">Open</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {filtered.map((doc) => {
                 let owner: React.ReactNode = "—";
                 if (doc.entry) {
@@ -115,10 +115,10 @@ export default async function DocumentsPage({
                   );
                 }
                 return (
-                  <tr key={doc.id} className="hover:bg-gray-50">
-                    <td className="td font-medium text-gray-900">
+                  <tr key={doc.id} className="hover:bg-surface-2">
+                    <td className="td font-medium text-fg">
                       {doc.kind === "LINK" ? "🔗 " : "📄 "}{doc.title}
-                      {doc.sizeBytes ? <span className="ml-1 text-xs text-gray-400">({fmtSize(doc.sizeBytes)})</span> : null}
+                      {doc.sizeBytes ? <span className="ml-1 text-xs text-faint">({fmtSize(doc.sizeBytes)})</span> : null}
                     </td>
                     <td className="td">{owner}</td>
                     <td className="td">{doc.kind === "LINK" ? "Link" : "File"}</td>

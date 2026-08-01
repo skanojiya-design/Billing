@@ -41,11 +41,11 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-white px-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-surface-2 to-bg px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
           <BrandLogo className="h-11 w-auto" />
-          <p className="text-xs text-gray-500 leading-tight">Billing · payment &amp; asset tracker</p>
+          <p className="text-xs text-muted leading-tight">Billing · payment &amp; asset tracker</p>
         </div>
 
         <form onSubmit={onSubmit} className="card space-y-4 p-6">
@@ -57,13 +57,13 @@ function LoginForm() {
             <label className="label">Password</label>
             <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
           </div>
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
           <button className="btn-primary w-full" disabled={loading}>
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
 
-        <p className="mt-4 text-center text-xs text-gray-400">
+        <p className="mt-4 text-center text-xs text-faint">
           Demo: admin@roqit.com · editor@roqit.com · viewer@roqit.com — password123
         </p>
       </div>

@@ -81,30 +81,30 @@ export default async function DeviceDetailPage({ params }: { params: { id: strin
               purchases={purchases.map((p) => ({ id: p.id, label: `${p.reference || format(p.purchaseDate, "d MMM yyyy")}${p.supplier ? ` · ${p.supplier.name}` : ""}` }))}
             />
           ) : (
-            <div className="card p-6 text-sm text-gray-600">Read-only — ask an editor to make changes.</div>
+            <div className="card p-6 text-sm text-muted">Read-only — ask an editor to make changes.</div>
           )}
 
           {/* Deployment history */}
           <div className="card p-5">
-            <p className="text-sm font-medium text-gray-900">Deployment history</p>
+            <p className="text-sm font-medium text-fg">Deployment history</p>
             {device.deployments.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-400">No movements recorded yet.</p>
+              <p className="mt-2 text-sm text-faint">No movements recorded yet.</p>
             ) : (
               <ul className="mt-3 space-y-3">
                 {device.deployments.map((d) => (
-                  <li key={d.id} className="flex gap-3 border-l-2 border-gray-200 pl-3">
+                  <li key={d.id} className="flex gap-3 border-l-2 border-border pl-3">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">
+                      <p className="text-sm font-medium text-fg">
                         {DEPLOYMENT_ACTION_LABELS[d.action as DeploymentAction] ?? d.action}
                         {d.site ? ` — ${d.site}` : ""}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted">
                         {format(d.startDate, "d MMM yyyy")}
                         {d.customer ? ` · ${d.customer}` : ""}
                         {d.assignedTo ? ` · ${d.assignedTo}` : ""}
                         {d.endDate ? ` · ended ${format(d.endDate, "d MMM yyyy")}` : ""}
                       </p>
-                      {d.notes && <p className="text-xs text-gray-400">{d.notes}</p>}
+                      {d.notes && <p className="text-xs text-faint">{d.notes}</p>}
                     </div>
                   </li>
                 ))}
@@ -120,21 +120,21 @@ export default async function DeviceDetailPage({ params }: { params: { id: strin
 
         {/* Documents */}
         <div className="card p-5">
-          <p className="text-sm font-medium text-gray-900">Documents</p>
-          <p className="mt-0.5 text-xs text-gray-500">Warranty card, config, photos…</p>
+          <p className="text-sm font-medium text-fg">Documents</p>
+          <p className="mt-0.5 text-xs text-muted">Warranty card, config, photos…</p>
           {device.documents.length === 0 ? (
-            <p className="mt-3 text-sm text-gray-400">None attached yet.</p>
+            <p className="mt-3 text-sm text-faint">None attached yet.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {device.documents.map((doc) => (
-                <li key={doc.id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2">
+                <li key={doc.id} className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-3 py-2">
                   <div className="min-w-0">
                     {doc.kind === "LINK" ? (
                       <a href={doc.externalUrl ?? "#"} target="_blank" rel="noreferrer" className="truncate text-sm text-brand-600 hover:underline">🔗 {doc.title}</a>
                     ) : (
                       <a href={`/api/documents/${doc.id}`} className="truncate text-sm text-brand-600 hover:underline">📄 {doc.title}</a>
                     )}
-                    <p className="text-[11px] text-gray-400">{doc.uploadedBy?.name ?? "—"} · {format(doc.createdAt, "d MMM yyyy")}</p>
+                    <p className="text-[11px] text-faint">{doc.uploadedBy?.name ?? "—"} · {format(doc.createdAt, "d MMM yyyy")}</p>
                   </div>
                   {editable && <DeleteDocButton id={doc.id} />}
                 </li>

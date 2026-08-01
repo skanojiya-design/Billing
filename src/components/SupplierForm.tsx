@@ -62,8 +62,8 @@ export function SupplierForm({ supplier }: { supplier?: SupplierData }) {
           <textarea className="input" name="notes" rows={2} defaultValue={supplier?.notes ?? ""} />
         </div>
         <div className="flex items-center sm:col-span-2">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" name="active" defaultChecked={supplier ? supplier.active : true} className="h-4 w-4 rounded border-gray-300" />
+          <label className="flex items-center gap-2 text-sm text-fg">
+            <input type="checkbox" name="active" defaultChecked={supplier ? supplier.active : true} className="h-4 w-4 rounded border-border" />
             Active
           </label>
         </div>
