@@ -54,7 +54,12 @@ const serviceSchema = z.object({
   vendorType: z.enum(["SUBSCRIPTION", "SERVICE"]),
   billingFrequency: z.enum(["MONTHLY", "ANNUAL", "MONTHLY_USAGE", "PAY_AS_YOU_GO", "ONE_TIME"]),
   currency: z.enum(["INR", "USD", "EUR"]),
-  dueDayOfMonth: z.coerce.number().int().min(1).max(31).optional().or(z.literal(NaN)),
+  // Blank means "no fixed due day". Treat "" / null as undefined so the
+  // optional passes, instead of coercing "" → 0 and failing .min(1).
+  dueDayOfMonth: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().int().min(1).max(31).optional(),
+  ),
   defaultInr: z.coerce.number().min(0).default(0),
   defaultUsd: z.coerce.number().min(0).default(0),
   defaultEur: z.coerce.number().min(0).default(0),
