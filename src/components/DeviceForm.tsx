@@ -3,27 +3,29 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveDevice } from "@/app/actions";
-import {
-  DEVICE_STATUSES,
-  DEVICE_STATUS_LABELS,
-  DEVICE_CATEGORY_SUGGESTIONS,
-  CURRENCIES,
-} from "@/lib/constants";
+import { DEVICE_STATUSES, DEVICE_STATUS_LABELS, CURRENCIES } from "@/lib/constants";
 
 type Option = { id: string; label: string };
 export type DeviceInitial = {
   id?: string;
   purchaseId?: string | null;
   supplierId?: string | null;
-  category?: string;
-  make?: string | null;
-  model?: string | null;
-  serialNo?: string | null;
-  imei?: string | null;
   assetTag?: string | null;
+  deviceName?: string | null;
+  modelNo?: string | null;
+  serialImei?: string | null;
+  qtyPurchased?: number;
+  vendorName?: string | null;
+  invoiceNo?: string | null;
   cost?: number; // major units
   currency?: string;
   purchaseDate?: string;
+  assignedTo?: string | null;
+  projectClient?: string | null;
+  location?: string | null;
+  statusText?: string | null;
+  installedStatus?: string | null;
+  installedBy?: string | null;
   status?: string;
   notes?: string | null;
 };
@@ -64,44 +66,39 @@ export function DeviceForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="label">Category</label>
-          <input className="input" name="category" list="device-categories" defaultValue={v.category ?? ""} placeholder="e.g. GPS Tracker" />
-          <datalist id="device-categories">
-            {DEVICE_CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}
-          </datalist>
-        </div>
-        <div>
-          <label className="label">Status</label>
-          <select className="input" name="status" defaultValue={v.status ?? "IN_STOCK"}>
-            {DEVICE_STATUSES.map((s) => <option key={s} value={s}>{DEVICE_STATUS_LABELS[s]}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="label">Make</label>
-          <input className="input" name="make" defaultValue={v.make ?? ""} placeholder="e.g. Teltonika" />
-        </div>
-        <div>
-          <label className="label">Model</label>
-          <input className="input" name="model" defaultValue={v.model ?? ""} placeholder="e.g. FMB920" />
-        </div>
-        <div>
-          <label className="label">Serial no.</label>
-          <input className="input" name="serialNo" defaultValue={v.serialNo ?? ""} placeholder="unique per device" />
-        </div>
-        <div>
-          <label className="label">IMEI</label>
-          <input className="input" name="imei" defaultValue={v.imei ?? ""} />
-        </div>
-        <div>
-          <label className="label">Asset tag</label>
-          <input className="input" name="assetTag" defaultValue={v.assetTag ?? ""} />
+          <label className="label">Device ID</label>
+          <input className="input" name="assetTag" defaultValue={v.assetTag ?? ""} placeholder="e.g. ROQIT-GPS-001" />
         </div>
         <div>
           <label className="label">Purchase date</label>
           <input className="input" type="date" name="purchaseDate" defaultValue={v.purchaseDate ?? ""} />
         </div>
         <div>
-          <label className="label">Cost</label>
+          <label className="label">Device name</label>
+          <input className="input" name="deviceName" defaultValue={v.deviceName ?? ""} placeholder="e.g. Sinocastle dash cam" />
+        </div>
+        <div>
+          <label className="label">Model no.</label>
+          <input className="input" name="modelNo" defaultValue={v.modelNo ?? ""} placeholder="e.g. A-267 AI Dash cam" />
+        </div>
+        <div>
+          <label className="label">Serial no. / IMEI</label>
+          <input className="input" name="serialImei" defaultValue={v.serialImei ?? ""} />
+        </div>
+        <div>
+          <label className="label">Qty purchased</label>
+          <input className="input" type="number" min="1" name="qtyPurchased" defaultValue={v.qtyPurchased ?? 1} />
+        </div>
+        <div>
+          <label className="label">Vendor name</label>
+          <input className="input" name="vendorName" defaultValue={v.vendorName ?? ""} placeholder="e.g. Sinocastle" />
+        </div>
+        <div>
+          <label className="label">Invoice no.</label>
+          <input className="input" name="invoiceNo" defaultValue={v.invoiceNo ?? ""} />
+        </div>
+        <div>
+          <label className="label">Purchase cost</label>
           <input className="input" type="number" step="0.01" min="0" name="cost" defaultValue={v.cost ?? ""} />
         </div>
         <div>
@@ -111,14 +108,48 @@ export function DeviceForm({
           </select>
         </div>
         <div>
-          <label className="label">Supplier</label>
+          <label className="label">Assigned to</label>
+          <input className="input" name="assignedTo" defaultValue={v.assignedTo ?? ""} />
+        </div>
+        <div>
+          <label className="label">Project / Client</label>
+          <input className="input" name="projectClient" defaultValue={v.projectClient ?? ""} />
+        </div>
+        <div>
+          <label className="label">Location</label>
+          <input className="input" name="location" defaultValue={v.location ?? ""} placeholder="e.g. Hyderabad" />
+        </div>
+        <div>
+          <label className="label">Status</label>
+          <input className="input" name="statusText" defaultValue={v.statusText ?? ""} placeholder="e.g. ETO custody" />
+        </div>
+        <div>
+          <label className="label">Installed status</label>
+          <select className="input" name="installedStatus" defaultValue={v.installedStatus ?? ""}>
+            <option value="">—</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+        <div>
+          <label className="label">Installed by</label>
+          <input className="input" name="installedBy" defaultValue={v.installedBy ?? ""} />
+        </div>
+        <div>
+          <label className="label">Inventory status</label>
+          <select className="input" name="status" defaultValue={v.status ?? "IN_STOCK"}>
+            {DEVICE_STATUSES.map((s) => <option key={s} value={s}>{DEVICE_STATUS_LABELS[s]}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Supplier <span className="font-normal text-faint">(optional link)</span></label>
           <select className="input" name="supplierId" defaultValue={v.supplierId ?? defaultSupplierId ?? ""}>
             <option value="">— None —</option>
             {suppliers.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </div>
         <div>
-          <label className="label">Purchase</label>
+          <label className="label">Purchase <span className="font-normal text-faint">(optional link)</span></label>
           <select className="input" name="purchaseId" defaultValue={v.purchaseId ?? defaultPurchaseId ?? ""}>
             <option value="">— None —</option>
             {purchases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
@@ -127,7 +158,7 @@ export function DeviceForm({
       </div>
 
       <div>
-        <label className="label">Notes</label>
+        <label className="label">Remarks</label>
         <textarea className="input" name="notes" rows={2} defaultValue={v.notes ?? ""} />
       </div>
 

@@ -41,13 +41,13 @@ export default async function DeviceDetailPage({ params }: { params: { id: strin
     prisma.purchase.findMany({ orderBy: { purchaseDate: "desc" }, include: { supplier: true }, take: 200 }),
   ]);
 
-  const title = [device.make, device.model].filter(Boolean).join(" ") || device.category;
+  const title = device.deviceName || device.modelNo || device.model || device.category;
 
   return (
     <div>
       <PageHeader
         title={title}
-        subtitle={`${device.category}${device.serialNo ? ` · SN ${device.serialNo}` : ""}`}
+        subtitle={[device.assetTag && `ID ${device.assetTag}`, device.serialImei && `SN/IMEI ${device.serialImei}`].filter(Boolean).join(" · ") || device.category}
         action={
           <div className="flex items-center gap-2">
             <StatusBadge status={device.status} label={DEVICE_STATUS_LABELS[device.status as DeviceStatus] ?? device.status} />
@@ -65,15 +65,22 @@ export default async function DeviceDetailPage({ params }: { params: { id: strin
                 id: device.id,
                 purchaseId: device.purchaseId,
                 supplierId: device.supplierId,
-                category: device.category,
-                make: device.make,
-                model: device.model,
-                serialNo: device.serialNo,
-                imei: device.imei,
                 assetTag: device.assetTag,
+                deviceName: device.deviceName,
+                modelNo: device.modelNo,
+                serialImei: device.serialImei,
+                qtyPurchased: device.qtyPurchased,
+                vendorName: device.vendorName,
+                invoiceNo: device.invoiceNo,
                 cost: device.costMinor ? device.costMinor / 100 : undefined,
                 currency: device.currency,
                 purchaseDate: toDateInput(device.purchaseDate),
+                assignedTo: device.assignedTo,
+                projectClient: device.projectClient,
+                location: device.location,
+                statusText: device.statusText,
+                installedStatus: device.installedStatus,
+                installedBy: device.installedBy,
                 status: device.status,
                 notes: device.notes,
               }}

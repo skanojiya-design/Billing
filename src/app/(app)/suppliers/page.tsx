@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getSessionUser, canEdit } from "@/lib/auth";
-import { toggleSupplierActive } from "@/app/actions";
+import { toggleSupplierActive, deleteSupplier } from "@/app/actions";
 import { SUPPLIER_TYPE_LABELS, type SupplierType } from "@/lib/constants";
 import { PageHeader, StatusBadge } from "@/components/ui";
+import { DeleteButton } from "@/components/DeleteButton";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,12 @@ export default async function SuppliersPage() {
                         <form action={toggleSupplierActive.bind(null, s.id)}>
                           <button className="text-xs font-medium text-brand-600 hover:underline">{s.active ? "Deactivate" : "Activate"}</button>
                         </form>
+                        <DeleteButton
+                          action={deleteSupplier.bind(null, s.id)}
+                          label="Delete"
+                          className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50"
+                          confirmText={`Delete supplier “${s.name}”? Its ${s._count.purchases} purchase(s) and ${s._count.devices} device(s) are kept but will no longer show this supplier.`}
+                        />
                       </div>
                     </td>
                   )}

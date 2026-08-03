@@ -243,6 +243,17 @@ model Device {
   location     String?
   assignedTo   String?
   notes        String?
+  // Inventory-register template fields — shown 1:1 in the devices table.
+  deviceName      String?
+  modelNo         String?
+  serialImei      String?
+  qtyPurchased    Int      @default(1)
+  vendorName      String?
+  invoiceNo       String?
+  projectClient   String?
+  statusText      String? // free-text holding/custody status from the register (e.g. "ETO custody")
+  installedStatus String? // Yes / No
+  installedBy     String?
   createdById  String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
