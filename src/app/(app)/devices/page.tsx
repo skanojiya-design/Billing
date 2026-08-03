@@ -9,6 +9,7 @@ import {
   type Currency,
 } from "@/lib/constants";
 import { PageHeader, StatusBadge } from "@/components/ui";
+import { DeviceBulkUpload } from "@/components/DeviceBulkUpload";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,8 @@ export default async function DevicesPage({
           </div>
         }
       />
+
+      {editable && <DeviceBulkUpload />}
 
       {/* Filters */}
       <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4">

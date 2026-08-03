@@ -16,6 +16,7 @@ import { majorToMinor } from "@/lib/money";
 import { generateEntriesForPeriod, duplicatePreviousMonthEntries } from "@/lib/entries";
 import { runAlerts } from "@/lib/alerts";
 import { flushOutbox } from "@/lib/email";
+import ExcelJS from "exceljs";
 
 async function requireUser() {
   const session = await getSessionUser();
@@ -440,6 +441,19 @@ export async function toggleSupplierActive(id: string) {
   revalidatePath("/suppliers");
 }
 
+export async function deleteSupplier(id: string) {
+  const user = await requireEditor();
+  const s = await prisma.supplier.findUnique({ where: { id } });
+  if (!s) return;
+  // Purchases and devices that referenced this supplier are kept — their
+  // supplierId is set to null automatically (onDelete: SetNull in the schema),
+  // so no history is lost.
+  await prisma.supplier.delete({ where: { id } });
+  await audit(user.id, "DELETE", "Supplier", id, s.name);
+  revalidatePath("/suppliers");
+  redirect("/suppliers");
+}
+
 // --- Purchases -------------------------------------------------------------
 const purchaseSchema = z.object({
   id: z.string().optional(),
@@ -617,4 +631,198 @@ export async function addDeployment(formData: FormData) {
   revalidatePath(`/devices/${p.deviceId}`);
   revalidatePath("/devices");
   redirect(`/devices/${p.deviceId}`);
+}
+
+// --- Bulk device import (Excel) --------------------------------------------
+// Column headers accepted in the uploaded sheet, matched case-insensitively and
+// ignoring spaces/punctuation. Extra columns are ignored; column order is free.
+const COLS: Record<string, string> = {
+  date: "date",
+  deviceid: "deviceId",
+  devicename: "deviceName",
+  modelno: "modelNo",
+  serialnoimei: "serialImei",
+  serialno: "serialImei",
+  serial: "serialImei",
+  imei: "serialImei",
+  qtypurchased: "qty",
+  qty: "qty",
+  quantity: "qty",
+  vendorname: "vendor",
+  vendor: "vendor",
+  supplier: "vendor",
+  invoiceno: "invoice",
+  invoice: "invoice",
+  purchasecost: "cost",
+  cost: "cost",
+  assignedto: "assignedTo",
+  projectclient: "project",
+  project: "project",
+  client: "project",
+  location: "location",
+  status: "statusText",
+  installedstatus: "installedStatus",
+  installed: "installedStatus",
+  installedby: "installedBy",
+  remarks: "remarks",
+  notes: "remarks",
+};
+
+const normHeader = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+function parseSheetDate(cell: ExcelJS.Cell): Date | null {
+  const v = cell.value;
+  if (v instanceof Date) return v;
+  const t = cell.text?.trim();
+  if (!t) return null;
+  // Accept dd/mm/yyyy or dd-mm-yyyy (their register format).
+  const m = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (m) {
+    let [, d, mo, y] = m;
+    const year = y.length === 2 ? 2000 + Number(y) : Number(y);
+    const dt = new Date(year, Number(mo) - 1, Number(d));
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  const dt = new Date(t);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+export type BulkImportResult = {
+  ok?: true;
+  error?: string;
+  created?: number;
+  skipped?: number;
+  errors?: { row: number; message: string }[];
+};
+
+// Parse an uploaded .xlsx of the shared inventory template and create one
+// device per data row. Never throws to the UI — returns a per-row report.
+export async function bulkUploadDevices(formData: FormData): Promise<BulkImportResult> {
+  const user = await requireEditor();
+  try {
+    const file = formData.get("file") as File | null;
+    if (!file || file.size === 0) return { error: "Please choose an Excel file to upload." };
+    if (file.size > 10 * 1024 * 1024) return { error: "File is too large (max 10 MB)." };
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await file.arrayBuffer());
+    const ws = wb.worksheets[0];
+    if (!ws) return { error: "The workbook has no sheets." };
+
+    // Locate the header row (first row that has a Device ID / Device Name / Serial column).
+    let headerRowNo = 0;
+    const colMap: Record<string, number> = {};
+    for (let r = 1; r <= Math.min(ws.rowCount, 10); r++) {
+      const row = ws.getRow(r);
+      const found: Record<string, number> = {};
+      row.eachCell({ includeEmpty: false }, (cell, col) => {
+        const key = COLS[normHeader(String(cell.text || ""))];
+        if (key && !found[key]) found[key] = col;
+      });
+      if (found.deviceId || found.deviceName || found.serialImei) {
+        headerRowNo = r;
+        Object.assign(colMap, found);
+        break;
+      }
+    }
+    if (!headerRowNo) {
+      return { error: "Couldn't find the header row. Use the provided template (needs a Device Name or Serial No / IMEI column)." };
+    }
+
+    const suppliers = await prisma.supplier.findMany({ select: { id: true, name: true } });
+    const supplierByName = new Map(suppliers.map((s) => [s.name.trim().toLowerCase(), s.id]));
+
+    // Existing asset tags — used to skip rows already imported (safe re-upload).
+    const existing = await prisma.device.findMany({ where: { assetTag: { not: null } }, select: { assetTag: true } });
+    const seenTags = new Set(existing.map((d) => (d.assetTag || "").trim().toLowerCase()).filter(Boolean));
+
+    const cellText = (row: ExcelJS.Row, key: string) => {
+      const col = colMap[key];
+      return col ? String(row.getCell(col).text || "").trim() : "";
+    };
+
+    let created = 0;
+    let skipped = 0;
+    const errors: { row: number; message: string }[] = [];
+
+    for (let r = headerRowNo + 1; r <= ws.rowCount; r++) {
+      const row = ws.getRow(r);
+      const deviceName = cellText(row, "deviceName");
+      const deviceId = cellText(row, "deviceId");
+      const serialImei = cellText(row, "serialImei");
+      const modelNo = cellText(row, "modelNo");
+      // Skip fully-empty rows.
+      if (!deviceName && !deviceId && !serialImei && !modelNo) continue;
+
+      const tagKey = deviceId.toLowerCase();
+      if (deviceId && seenTags.has(tagKey)) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        const vendor = cellText(row, "vendor");
+        const invoice = cellText(row, "invoice");
+        const qty = cellText(row, "qty");
+        const project = cellText(row, "project");
+        const statusText = cellText(row, "statusText");
+        const installedStatus = cellText(row, "installedStatus");
+        const installedBy = cellText(row, "installedBy");
+        const remarks = cellText(row, "remarks");
+
+        const costNum = parseFloat(cellText(row, "cost").replace(/[^0-9.]/g, "")) || 0;
+        const dateCol = colMap["date"];
+        const purchaseDate = dateCol ? parseSheetDate(row.getCell(dateCol)) : null;
+
+        const installed = /^(y|yes|true|installed|custody|deployed)/i.test(installedStatus);
+        const status = installed ? "DEPLOYED" : "IN_STOCK";
+
+        const supplierId = vendor ? supplierByName.get(vendor.toLowerCase()) ?? null : null;
+
+        const notes = [
+          modelNo && `Model No: ${modelNo}`,
+          invoice && `Invoice: ${invoice}`,
+          qty && `Qty purchased: ${qty}`,
+          project && `Project/Client: ${project}`,
+          installedStatus && `Installed: ${installedStatus}${installedBy ? ` (by ${installedBy})` : ""}`,
+          statusText && `Sheet status: ${statusText}`,
+          vendor && !supplierId && `Vendor: ${vendor}`,
+          remarks && `Remarks: ${remarks}`,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
+        await prisma.device.create({
+          data: {
+            category: "Device",
+            model: deviceName || modelNo || null,
+            // Their "Serial No / IMEI" values repeat across rows, so store it in
+            // imei (not the unique serialNo) to avoid false clashes.
+            imei: serialImei || null,
+            assetTag: deviceId || null,
+            supplierId,
+            costMinor: majorToMinor(costNum),
+            currency: "INR",
+            purchaseDate,
+            location: cellText(row, "location") || null,
+            assignedTo: cellText(row, "assignedTo") || null,
+            status,
+            notes: notes || null,
+            createdById: user.id,
+          },
+        });
+        if (deviceId) seenTags.add(tagKey);
+        created++;
+      } catch (e) {
+        errors.push({ row: r, message: e instanceof Error ? e.message : "Failed to import row." });
+      }
+    }
+
+    await audit(user.id, "BULK_IMPORT", "Device", undefined, `created ${created}, skipped ${skipped}, errors ${errors.length}`);
+    revalidatePath("/devices");
+    return { ok: true, created, skipped, errors };
+  } catch (e) {
+    console.error("bulkUploadDevices failed:", e);
+    return { error: e instanceof Error ? e.message : "Could not read the file. Make sure it's a valid .xlsx." };
+  }
 }
