@@ -127,20 +127,21 @@ export function Sidebar({ user }: { user: { name: string; email: string; role: R
 
   return (
     <>
-      {/* Mobile top bar — menu button on the left so it matches the drawer,
-          which slides in from the left. */}
+      {/* Mobile top bar — logo on the left, menu button on the right (the drawer
+          slides in from the right to match). */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-surface px-4 lg:hidden">
+        <Logo />
         <button aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg p-2 text-muted hover:bg-surface-2">
           {menuIcon}
         </button>
-        <Logo />
       </header>
 
-      {/* Mobile drawer + overlay (always full labels — not an .app-sidebar) */}
+      {/* Mobile drawer + overlay (always full labels — not an .app-sidebar).
+          Anchored right to match the menu button. */}
       {open && <div className="fixed inset-0 z-40 bg-black/30 lg:hidden" onClick={() => setOpen(false)} />}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-surface transition-transform duration-200 lg:hidden ${
-          open ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 right-0 z-50 flex w-64 flex-col border-l border-border bg-surface transition-transform duration-200 lg:hidden ${
+          open ? "translate-x-0" : "translate-x-full"
         }`}
       >
         <div className="flex h-14 items-center justify-between border-b border-border px-4">
