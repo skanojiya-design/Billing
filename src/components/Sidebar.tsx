@@ -127,12 +127,13 @@ export function Sidebar({ user }: { user: { name: string; email: string; role: R
 
   return (
     <>
-      {/* Mobile top bar */}
+      {/* Mobile top bar — menu button on the left so it matches the drawer,
+          which slides in from the left. */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-surface px-4 lg:hidden">
-        <Logo />
         <button aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg p-2 text-muted hover:bg-surface-2">
           {menuIcon}
         </button>
+        <Logo />
       </header>
 
       {/* Mobile drawer + overlay (always full labels — not an .app-sidebar) */}
