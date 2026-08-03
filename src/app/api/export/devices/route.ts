@@ -23,12 +23,14 @@ export async function GET(req: NextRequest) {
   if (supplierId) where.supplierId = supplierId;
   if (q) {
     where.OR = [
-      { serialNo: { contains: q, mode: "insensitive" } },
+      { assetTag: { contains: q, mode: "insensitive" } },
+      { deviceName: { contains: q, mode: "insensitive" } },
+      { modelNo: { contains: q, mode: "insensitive" } },
+      { serialImei: { contains: q, mode: "insensitive" } },
+      { vendorName: { contains: q, mode: "insensitive" } },
+      { invoiceNo: { contains: q, mode: "insensitive" } },
       { imei: { contains: q, mode: "insensitive" } },
       { model: { contains: q, mode: "insensitive" } },
-      { make: { contains: q, mode: "insensitive" } },
-      { assetTag: { contains: q, mode: "insensitive" } },
-      { category: { contains: q, mode: "insensitive" } },
     ];
   }
 
@@ -39,49 +41,58 @@ export async function GET(req: NextRequest) {
   });
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "roqit Billing";
+  wb.creator = "ROQIT Billing";
   wb.created = new Date();
-  const ws = wb.addWorksheet("Devices");
+  const ws = wb.addWorksheet("Inventory Register");
 
+  // Same columns as the import template, so exports round-trip cleanly.
   ws.columns = [
-    { header: "Category", key: "category", width: 16 },
-    { header: "Make", key: "make", width: 14 },
-    { header: "Model", key: "model", width: 16 },
-    { header: "Serial No.", key: "serial", width: 20 },
-    { header: "IMEI", key: "imei", width: 18 },
-    { header: "Asset Tag", key: "assetTag", width: 14 },
-    { header: "Supplier", key: "supplier", width: 18 },
-    { header: "Status", key: "status", width: 12 },
-    { header: "Location", key: "location", width: 18 },
+    { header: "S.No", key: "sno", width: 6 },
+    { header: "Date", key: "date", width: 14 },
+    { header: "Device ID", key: "deviceId", width: 16 },
+    { header: "Device Name", key: "deviceName", width: 22 },
+    { header: "Model No", key: "modelNo", width: 18 },
+    { header: "Serial No / IMEI", key: "serialImei", width: 20 },
+    { header: "Qty Purchased", key: "qty", width: 12 },
+    { header: "Vendor Name", key: "vendor", width: 18 },
+    { header: "Invoice No", key: "invoice", width: 16 },
+    { header: "Purchase Cost", key: "cost", width: 14 },
     { header: "Assigned To", key: "assignedTo", width: 16 },
-    { header: "Cost", key: "cost", width: 12 },
-    { header: "Currency", key: "currency", width: 10 },
-    { header: "Purchase Date", key: "purchaseDate", width: 16 },
+    { header: "Project / Client", key: "project", width: 18 },
+    { header: "Location", key: "location", width: 16 },
+    { header: "Status", key: "status", width: 16 },
+    { header: "Installed Status", key: "installed", width: 14 },
+    { header: "Installed by", key: "installedBy", width: 16 },
+    { header: "Remarks", key: "remarks", width: 28 },
   ];
 
   const header = ws.getRow(1);
   header.font = { bold: true, color: { argb: "FFFFFFFF" } };
   header.eachCell((cell) => {
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
   });
 
-  for (const d of devices) {
+  devices.forEach((d, i) => {
     ws.addRow({
-      category: d.category,
-      make: d.make ?? "",
-      model: d.model ?? "",
-      serial: d.serialNo ?? "",
-      imei: d.imei ?? "",
-      assetTag: d.assetTag ?? "",
-      supplier: d.supplier?.name ?? "",
-      status: DEVICE_STATUS_LABELS[d.status as DeviceStatus] ?? d.status,
-      location: d.location ?? "",
-      assignedTo: d.assignedTo ?? "",
+      sno: i + 1,
+      date: fmtDate(d.purchaseDate),
+      deviceId: d.assetTag ?? "",
+      deviceName: d.deviceName ?? d.model ?? "",
+      modelNo: d.modelNo ?? "",
+      serialImei: d.serialImei ?? d.imei ?? "",
+      qty: d.qtyPurchased ?? 1,
+      vendor: d.vendorName ?? d.supplier?.name ?? "",
+      invoice: d.invoiceNo ?? "",
       cost: d.costMinor ? d.costMinor / 100 : "",
-      currency: d.currency,
-      purchaseDate: fmtDate(d.purchaseDate),
+      assignedTo: d.assignedTo ?? "",
+      project: d.projectClient ?? "",
+      location: d.location ?? "",
+      status: d.statusText ?? (DEVICE_STATUS_LABELS[d.status as DeviceStatus] ?? d.status),
+      installed: d.installedStatus ?? "",
+      installedBy: d.installedBy ?? "",
+      remarks: d.notes ?? "",
     });
-  }
+  });
 
   ws.getColumn("cost").numFmt = "#,##0.00";
   ws.views = [{ state: "frozen", ySplit: 1 }];

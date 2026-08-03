@@ -506,15 +506,22 @@ const deviceSchema = z.object({
   id: z.string().optional(),
   purchaseId: z.string().optional(),
   supplierId: z.string().optional(),
-  category: z.string().optional(),
-  make: z.string().optional(),
-  model: z.string().optional(),
-  serialNo: z.string().optional(),
-  imei: z.string().optional(),
-  assetTag: z.string().optional(),
+  assetTag: z.string().optional(), // "Device ID"
+  deviceName: z.string().optional(),
+  modelNo: z.string().optional(),
+  serialImei: z.string().optional(),
+  qtyPurchased: z.coerce.number().int().min(0).default(1),
+  vendorName: z.string().optional(),
+  invoiceNo: z.string().optional(),
   cost: z.coerce.number().min(0).default(0),
   currency: z.enum(["INR", "USD", "EUR"]),
   purchaseDate: z.string().optional(),
+  assignedTo: z.string().optional(),
+  projectClient: z.string().optional(),
+  location: z.string().optional(),
+  statusText: z.string().optional(),
+  installedStatus: z.string().optional(),
+  installedBy: z.string().optional(),
   status: z.enum(["IN_STOCK", "DEPLOYED", "FAULTY", "IN_REPAIR", "RETURNED", "RETIRED"]),
   notes: z.string().optional(),
 });
@@ -522,32 +529,45 @@ const deviceSchema = z.object({
 export async function saveDevice(formData: FormData): Promise<{ ok?: true; error?: string }> {
   const user = await requireEditor();
   const p = deviceSchema.parse(Object.fromEntries(formData));
+  const deviceName = p.deviceName?.trim() || null;
+  const serialImei = p.serialImei?.trim() || null;
   const data = {
     purchaseId: p.purchaseId || null,
     supplierId: p.supplierId || null,
-    category: p.category?.trim() || "Device",
-    make: p.make?.trim() || null,
-    model: p.model?.trim() || null,
-    serialNo: p.serialNo?.trim() || null,
-    imei: p.imei?.trim() || null,
+    category: "Device",
     assetTag: p.assetTag?.trim() || null,
+    deviceName,
+    modelNo: p.modelNo?.trim() || null,
+    serialImei,
+    qtyPurchased: p.qtyPurchased || 1,
+    vendorName: p.vendorName?.trim() || null,
+    invoiceNo: p.invoiceNo?.trim() || null,
+    // Keep the legacy fields in sync so existing search/detail keep working.
+    model: deviceName || p.modelNo?.trim() || null,
+    imei: serialImei,
     costMinor: majorToMinor(p.cost),
     currency: p.currency,
     purchaseDate: parseDate(p.purchaseDate),
+    assignedTo: p.assignedTo?.trim() || null,
+    projectClient: p.projectClient?.trim() || null,
+    location: p.location?.trim() || null,
+    statusText: p.statusText?.trim() || null,
+    installedStatus: p.installedStatus?.trim() || null,
+    installedBy: p.installedBy?.trim() || null,
     status: p.status,
     notes: p.notes?.trim() || null,
   };
   try {
     if (p.id) {
       await prisma.device.update({ where: { id: p.id }, data });
-      await audit(user.id, "UPDATE", "Device", p.id, data.serialNo ?? data.model ?? "device");
+      await audit(user.id, "UPDATE", "Device", p.id, data.assetTag ?? data.deviceName ?? data.model ?? "device");
     } else {
       const c = await prisma.device.create({ data: { ...data, createdById: user.id } });
-      await audit(user.id, "CREATE", "Device", c.id, data.serialNo ?? data.model ?? "device");
+      await audit(user.id, "CREATE", "Device", c.id, data.assetTag ?? data.deviceName ?? data.model ?? "device");
     }
   } catch (e) {
     if ((e as { code?: string }).code === "P2002") {
-      return { error: `A device with serial "${data.serialNo}" already exists.` };
+      return { error: "A device with this identifier already exists." };
     }
     throw e;
   }
@@ -779,27 +799,25 @@ export async function bulkUploadDevices(formData: FormData): Promise<BulkImportR
 
         const supplierId = vendor ? supplierByName.get(vendor.toLowerCase()) ?? null : null;
 
-        const notes = [
-          modelNo && `Model No: ${modelNo}`,
-          invoice && `Invoice: ${invoice}`,
-          qty && `Qty purchased: ${qty}`,
-          project && `Project/Client: ${project}`,
-          installedStatus && `Installed: ${installedStatus}${installedBy ? ` (by ${installedBy})` : ""}`,
-          statusText && `Sheet status: ${statusText}`,
-          vendor && !supplierId && `Vendor: ${vendor}`,
-          remarks && `Remarks: ${remarks}`,
-        ]
-          .filter(Boolean)
-          .join(" · ");
-
         await prisma.device.create({
           data: {
             category: "Device",
-            model: deviceName || modelNo || null,
-            // Their "Serial No / IMEI" values repeat across rows, so store it in
-            // imei (not the unique serialNo) to avoid false clashes.
-            imei: serialImei || null,
             assetTag: deviceId || null,
+            deviceName: deviceName || null,
+            modelNo: modelNo || null,
+            // Their "Serial No / IMEI" values repeat across rows, so this is not
+            // the unique serialNo field — it's stored as-is here (and mirrored to
+            // imei for search) to avoid false uniqueness clashes.
+            serialImei: serialImei || null,
+            imei: serialImei || null,
+            model: deviceName || modelNo || null,
+            qtyPurchased: parseInt(qty, 10) || 1,
+            vendorName: vendor || null,
+            invoiceNo: invoice || null,
+            projectClient: project || null,
+            installedStatus: installedStatus || null,
+            installedBy: installedBy || null,
+            statusText: statusText || null,
             supplierId,
             costMinor: majorToMinor(costNum),
             currency: "INR",
@@ -807,7 +825,7 @@ export async function bulkUploadDevices(formData: FormData): Promise<BulkImportR
             location: cellText(row, "location") || null,
             assignedTo: cellText(row, "assignedTo") || null,
             status,
-            notes: notes || null,
+            notes: remarks || null,
             createdById: user.id,
           },
         });

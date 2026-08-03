@@ -10,6 +10,7 @@ import {
 } from "@/lib/constants";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import { DeviceBulkUpload } from "@/components/DeviceBulkUpload";
+import { format } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
@@ -30,12 +31,18 @@ export default async function DevicesPage({
   if (supplierId) where.supplierId = supplierId;
   if (q) {
     where.OR = [
-      { serialNo: { contains: q, mode: "insensitive" } },
-      { imei: { contains: q, mode: "insensitive" } },
-      { model: { contains: q, mode: "insensitive" } },
-      { make: { contains: q, mode: "insensitive" } },
       { assetTag: { contains: q, mode: "insensitive" } },
-      { category: { contains: q, mode: "insensitive" } },
+      { deviceName: { contains: q, mode: "insensitive" } },
+      { modelNo: { contains: q, mode: "insensitive" } },
+      { serialImei: { contains: q, mode: "insensitive" } },
+      { vendorName: { contains: q, mode: "insensitive" } },
+      { invoiceNo: { contains: q, mode: "insensitive" } },
+      { assignedTo: { contains: q, mode: "insensitive" } },
+      { location: { contains: q, mode: "insensitive" } },
+      // legacy fields, for devices created before the template columns
+      { imei: { contains: q, mode: "insensitive" } },
+      { serialNo: { contains: q, mode: "insensitive" } },
+      { model: { contains: q, mode: "insensitive" } },
     ];
   }
 
@@ -66,7 +73,7 @@ export default async function DevicesPage({
       <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4">
         <div className="min-w-[12rem] flex-1">
           <label className="label">Search</label>
-          <input className="input" name="q" defaultValue={q} placeholder="Serial, IMEI, model, make…" />
+          <input className="input" name="q" defaultValue={q} placeholder="Device ID, name, serial/IMEI, vendor…" />
         </div>
         <div>
           <label className="label">Status</label>
@@ -96,33 +103,55 @@ export default async function DevicesPage({
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-2">
               <tr>
-                <th className="th">Category / Model</th>
-                <th className="th">Serial</th>
-                <th className="th">IMEI</th>
-                <th className="th">Supplier</th>
+                <th className="th">S.No</th>
+                <th className="th">Date</th>
+                <th className="th">Device ID</th>
+                <th className="th">Device Name</th>
+                <th className="th">Model No</th>
+                <th className="th">Serial No / IMEI</th>
+                <th className="th text-right">Qty</th>
+                <th className="th">Vendor Name</th>
+                <th className="th">Invoice No</th>
+                <th className="th text-right">Purchase Cost</th>
+                <th className="th">Assigned To</th>
+                <th className="th">Project / Client</th>
+                <th className="th">Location</th>
                 <th className="th">Status</th>
-                <th className="th">Location / Assigned</th>
-                <th className="th text-right">Cost</th>
+                <th className="th">Installed</th>
+                <th className="th">Installed by</th>
+                <th className="th">Remarks</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {devices.map((d) => (
+              {devices.map((d, i) => (
                 <tr key={d.id} className="hover:bg-surface-2">
+                  <td className="td text-faint">{i + 1}</td>
+                  <td className="td whitespace-nowrap">{d.purchaseDate ? format(d.purchaseDate, "d-MMM-yy") : "—"}</td>
                   <td className="td">
                     <Link href={`/devices/${d.id}`} className="font-medium text-brand-600 hover:underline">
-                      {d.category}
+                      {d.assetTag || "—"}
                     </Link>
-                    {(d.make || d.model) && <p className="text-xs text-faint">{[d.make, d.model].filter(Boolean).join(" ")}</p>}
                   </td>
-                  <td className="td">{d.serialNo || "—"}</td>
-                  <td className="td">{d.imei || "—"}</td>
-                  <td className="td">{d.supplier?.name || "—"}</td>
-                  <td className="td"><StatusBadge status={d.status} label={DEVICE_STATUS_LABELS[d.status as DeviceStatus] ?? d.status} /></td>
+                  <td className="td font-medium text-fg">{d.deviceName || d.model || "—"}</td>
+                  <td className="td">{d.modelNo || "—"}</td>
+                  <td className="td">{d.serialImei || d.imei || "—"}</td>
+                  <td className="td text-right">{d.qtyPurchased ?? 1}</td>
+                  <td className="td">{d.vendorName || d.supplier?.name || "—"}</td>
+                  <td className="td">{d.invoiceNo || "—"}</td>
+                  <td className="td text-right whitespace-nowrap">{d.costMinor ? formatMoneyCompact(d.costMinor, d.currency as Currency) : "—"}</td>
+                  <td className="td">{d.assignedTo || "—"}</td>
+                  <td className="td">{d.projectClient || "—"}</td>
+                  <td className="td">{d.location || "—"}</td>
                   <td className="td">
-                    {d.location || "—"}
-                    {d.assignedTo && <p className="text-xs text-faint">{d.assignedTo}</p>}
+                    {d.statusText ? (
+                      <span>{d.statusText}</span>
+                    ) : (
+                      <StatusBadge status={d.status} label={DEVICE_STATUS_LABELS[d.status as DeviceStatus] ?? d.status} />
+                    )}
                   </td>
-                  <td className="td text-right">{d.costMinor ? formatMoneyCompact(d.costMinor, d.currency as Currency) : "—"}</td>
+                  <td className="td">{d.installedStatus || "—"}</td>
+                  <td className="td">{d.installedBy || "—"}</td>
+                  <td className="td max-w-[16rem]"><span className="line-clamp-2 text-xs text-muted">{d.notes || ""}</span></td>
                 </tr>
               ))}
             </tbody>
