@@ -3,6 +3,7 @@ import { getSessionUser, canEdit } from "@/lib/auth";
 import { emailConfigured } from "@/lib/email";
 import { PageHeader, StatusBadge, EmptyState } from "@/components/ui";
 import { RunButton } from "@/components/RunButton";
+import { RunAlertsPanel } from "@/components/RunAlertsPanel";
 import { runAlertsAction, flushOutboxAction } from "@/app/actions";
 import { format } from "date-fns";
 
@@ -22,6 +23,13 @@ export default async function AlertsPage() {
   const emails = await prisma.emailOutbox.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
   const queued = emails.filter((e) => e.status === "QUEUED").length;
   const liveEmail = emailConfigured();
+
+  // Active team members that can receive a reminder when running alerts by hand.
+  const members = await prisma.user.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, email: true, role: true },
+  });
 
   return (
     <div>
@@ -48,12 +56,13 @@ export default async function AlertsPage() {
               ) : (
                 <>Email delivery is <strong>off</strong> until configured.</>
               )}{" "}
-              Run on a schedule via <code>npm run alerts:run</code>, or here. Reminders go to all active Admins &amp; Editors.
+              Run on a schedule via <code>npm run alerts:run</code>, or here. The daily schedule reminds all active Admins &amp; Editors;
+              a manual run can target specific members via the picker.
             </p>
           </div>
           {editable && (
             <div className="flex flex-col items-end gap-2">
-              <RunButton action={runAlertsAction} label="Run alerts now" />
+              <RunAlertsPanel members={members} runAction={runAlertsAction} />
               <RunButton action={flushOutboxAction} label="Send queued email" className="btn-secondary" />
             </div>
           )}

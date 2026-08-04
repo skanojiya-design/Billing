@@ -378,14 +378,18 @@ export async function toggleUserActive(id: string) {
 // --------------------------------------------------------------------------
 // Alerts
 // --------------------------------------------------------------------------
-export async function runAlertsAction() {
+export async function runAlertsAction(recipientUserIds?: string[]) {
   const user = await requireUser();
   if (!canEdit(user.role)) throw new Error("Only editors/admins can run alerts.");
-  const r = await runAlerts();
-  await audit(user.id, "RUN_ALERTS", "System", undefined, JSON.stringify(r));
+  const ids = Array.isArray(recipientUserIds) ? recipientUserIds.filter(Boolean) : [];
+  const r = await runAlerts({ recipientUserIds: ids });
+  // Deliver immediately so the operator sees the send happen from this click.
+  const flush = await flushOutbox();
+  await audit(user.id, "RUN_ALERTS", "System", undefined, JSON.stringify({ ...r, ...flush, recipients: ids.length || "all" }));
   revalidatePath("/alerts");
+  const scope = ids.length > 0 ? `${ids.length} selected recipient(s)` : "all Admins & Editors";
   return {
-    message: `Marked ${r.markedOverdue} overdue · queued ${r.dueSoonQueued} due-soon + ${r.overdueQueued} overdue reminders.`,
+    message: `Queued ${r.dueSoonQueued} due-soon + ${r.overdueQueued} overdue for ${scope}; sent ${flush.sent}${flush.failed ? `, ${flush.failed} failed` : ""}.`,
   };
 }
 

@@ -45,16 +45,28 @@ export type AlertRunResult = {
   overdueQueued: number;
 };
 
-export async function runAlerts(): Promise<AlertRunResult> {
+export type RunAlertsOptions = {
+  // Restrict reminders to these specific user IDs (still must be active). Used
+  // by the "Run alerts now" button when the operator picks recipients. When
+  // empty/omitted (e.g. the scheduled cron), reminders go to the whole office
+  // team — all active Admins & Editors.
+  recipientUserIds?: string[];
+};
+
+export async function runAlerts(options: RunAlertsOptions = {}): Promise<AlertRunResult> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const windowDays = dueSoonWindow();
 
   const result: AlertRunResult = { markedOverdue: 0, dueSoonQueued: 0, overdueQueued: 0 };
 
-  // Who gets reminded — the office team responsible for paying.
+  // Who gets reminded. If specific recipients were selected, use just those
+  // (active only); otherwise the whole office team responsible for paying.
+  const selectedIds = options.recipientUserIds?.filter(Boolean) ?? [];
   const recipients = await prisma.user.findMany({
-    where: { active: true, role: { in: ["ADMIN", "EDITOR"] } },
+    where: selectedIds.length > 0
+      ? { active: true, id: { in: selectedIds } }
+      : { active: true, role: { in: ["ADMIN", "EDITOR"] } },
     select: { email: true, name: true },
   });
   if (recipients.length === 0) return result;
