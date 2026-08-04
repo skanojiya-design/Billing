@@ -15,7 +15,8 @@ import {
 import { majorToMinor } from "@/lib/money";
 import { generateEntriesForPeriod, duplicatePreviousMonthEntries } from "@/lib/entries";
 import { runAlerts } from "@/lib/alerts";
-import { flushOutbox } from "@/lib/email";
+import { flushOutbox, sendWelcomeEmail } from "@/lib/email";
+import { ROLE_LABELS, type Role } from "@/lib/constants";
 import ExcelJS from "exceljs";
 
 async function requireUser() {
@@ -347,6 +348,17 @@ export async function saveUser(formData: FormData) {
       data: { name: p.name.trim(), email, role: p.role, passwordHash: await hashPassword(p.password) },
     });
     await audit(actor.id, "CREATE", "User", created.id, email);
+    // Notify the new member. Best-effort — never block account creation on email.
+    try {
+      await sendWelcomeEmail({
+        toEmail: email,
+        toName: p.name.trim(),
+        roleLabel: ROLE_LABELS[p.role as Role] ?? p.role,
+        tempPassword: p.password,
+      });
+    } catch (e) {
+      console.error("welcome email failed:", e);
+    }
   }
   revalidatePath("/team");
   redirect("/team");
@@ -366,14 +378,18 @@ export async function toggleUserActive(id: string) {
 // --------------------------------------------------------------------------
 // Alerts
 // --------------------------------------------------------------------------
-export async function runAlertsAction() {
+export async function runAlertsAction(recipientUserIds?: string[]) {
   const user = await requireUser();
   if (!canEdit(user.role)) throw new Error("Only editors/admins can run alerts.");
-  const r = await runAlerts();
-  await audit(user.id, "RUN_ALERTS", "System", undefined, JSON.stringify(r));
+  const ids = Array.isArray(recipientUserIds) ? recipientUserIds.filter(Boolean) : [];
+  const r = await runAlerts({ recipientUserIds: ids });
+  // Deliver immediately so the operator sees the send happen from this click.
+  const flush = await flushOutbox();
+  await audit(user.id, "RUN_ALERTS", "System", undefined, JSON.stringify({ ...r, ...flush, recipients: ids.length || "all" }));
   revalidatePath("/alerts");
+  const scope = ids.length > 0 ? `${ids.length} selected recipient(s)` : "all Admins & Editors";
   return {
-    message: `Marked ${r.markedOverdue} overdue · queued ${r.dueSoonQueued} due-soon + ${r.overdueQueued} overdue reminders.`,
+    message: `Queued ${r.dueSoonQueued} due-soon + ${r.overdueQueued} overdue for ${scope}; sent ${flush.sent}${flush.failed ? `, ${flush.failed} failed` : ""}.`,
   };
 }
 

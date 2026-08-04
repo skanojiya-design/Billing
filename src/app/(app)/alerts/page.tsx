@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/db";
 import { getSessionUser, canEdit } from "@/lib/auth";
+import { emailConfigured } from "@/lib/email";
 import { PageHeader, StatusBadge, EmptyState } from "@/components/ui";
 import { RunButton } from "@/components/RunButton";
+import { RunAlertsPanel } from "@/components/RunAlertsPanel";
 import { runAlertsAction, flushOutboxAction } from "@/app/actions";
 import { format } from "date-fns";
 
@@ -20,10 +22,25 @@ export default async function AlertsPage() {
 
   const emails = await prisma.emailOutbox.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
   const queued = emails.filter((e) => e.status === "QUEUED").length;
+  const liveEmail = emailConfigured();
+
+  // Active team members that can receive a reminder when running alerts by hand.
+  const members = await prisma.user.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, email: true, role: true },
+  });
 
   return (
     <div>
       <PageHeader title="Alerts & Email" subtitle="Automatic reminders for upcoming and overdue vendor payments" />
+
+      {!liveEmail && (
+        <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+          <strong>Email sending is not configured.</strong> Reminders are queued and listed below, but won&apos;t actually
+          send until <code>RESEND_API_KEY</code> (and <code>EMAIL_FROM</code>) are set in the environment.
+        </div>
+      )}
 
       <div className="card mb-6 p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -34,13 +51,18 @@ export default async function AlertsPage() {
               {queued > 0 ? `${queued} message(s) waiting to send.` : "Outbox is clear."}
             </p>
             <p className="mt-1 text-xs text-faint">
-              Emails are simulated (listed below). Run on a schedule via <code>npm run alerts:run</code>, or here.
-              Reminders go to all active Admins &amp; Editors.
+              {liveEmail ? (
+                <>Email delivery is <strong className="text-emerald-600 dark:text-emerald-400">live</strong> (Resend).</>
+              ) : (
+                <>Email delivery is <strong>off</strong> until configured.</>
+              )}{" "}
+              Run on a schedule via <code>npm run alerts:run</code>, or here. The daily schedule reminds all active Admins &amp; Editors;
+              a manual run can target specific members via the picker.
             </p>
           </div>
           {editable && (
             <div className="flex flex-col items-end gap-2">
-              <RunButton action={runAlertsAction} label="Run alerts now" />
+              <RunAlertsPanel members={members} runAction={runAlertsAction} />
               <RunButton action={flushOutboxAction} label="Send queued email" className="btn-secondary" />
             </div>
           )}
